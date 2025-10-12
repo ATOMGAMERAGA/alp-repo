@@ -291,7 +291,7 @@ _alp_completions() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     
-    local commands="update install remove upgrade list installed search info stats clean config help"
+    local commands="update install remove upgrade list installed search info stats clean config self-update help"
     
     if [[ ${COMP_CWORD} -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -308,6 +308,67 @@ complete -o bashdefault -o default -o nospace -F _alp_completions alp
 COMPLETION
     
     log_success "Shell completion oluşturuldu"
+}
+
+create_update_script() {
+    log_info "Self-update scripti oluşturuluyor..."
+    
+    cat > "$INSTALL_DIR/alp_update.sh" << 'UPDATE_SCRIPT'
+#!/bin/bash
+
+# Alp Self-Update Script
+# Alp'in kendisini güncelleme özelliği
+
+set -e
+
+INSTALL_DIR="/usr/local/lib/alp"
+MANAGER_URL="https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/alp_manager.py"
+BACKUP_DIR="/tmp/alp_backup_$$"
+
+echo -e "\033[0;36m🔄 Alp Self-Update Başlıyor...${NC}"
+
+# Backup oluştur
+echo -e "\033[1;33m→ Backup oluşturuluyor...${NC}"
+mkdir -p "$BACKUP_DIR"
+cp -r "$INSTALL_DIR" "$BACKUP_DIR/" 2>/dev/null || true
+
+echo -e "\033[0;33m→ Yeni sürüm indiriliyor...${NC}"
+
+# Yeni sürümü indir
+if curl -s -L "$MANAGER_URL" -o "$INSTALL_DIR/alp_manager.py.new" 2>/dev/null; then
+    chmod +x "$INSTALL_DIR/alp_manager.py.new"
+    
+    # Syntax kontrolü
+    echo -e "\033[0;33m→ Syntax kontrol ediliyor...${NC}"
+    if python3 -m py_compile "$INSTALL_DIR/alp_manager.py.new" 2>/dev/null; then
+        # Eski sürümü sil, yenisini taşı
+        rm -f "$INSTALL_DIR/alp_manager.py"
+        mv "$INSTALL_DIR/alp_manager.py.new" "$INSTALL_DIR/alp_manager.py"
+        
+        # Backup'ı temizle
+        rm -rf "$BACKUP_DIR"
+        
+        echo -e "\033[0;32m✅ Alp başarıyla güncellendi!${NC}"
+        echo -e "\033[0;36mℹ️  Yeni sürüm bilgisi:${NC}"
+        alp help | head -3
+        exit 0
+    else
+        echo -e "\033[0;31m❌ Yeni sürümde syntax hatası var!${NC}"
+        echo -e "\033[1;33m⚠️  Eski sürüme geri dönülüyor...${NC}"
+        cp -r "$BACKUP_DIR/alp" "$INSTALL_DIR" 2>/dev/null || true
+        rm -rf "$BACKUP_DIR"
+        exit 1
+    fi
+else
+    echo -e "\033[0;31m❌ Yeni sürüm indirilemedi!${NC}"
+    echo -e "\033[1;33m⚠️  Eski sürüm korundu...${NC}"
+    rm -rf "$BACKUP_DIR"
+    exit 1
+fi
+UPDATE_SCRIPT
+    
+    chmod +x "$INSTALL_DIR/alp_update.sh"
+    log_success "Self-update scripti oluşturuldu"
 }
 
 create_uninstall_script() {
@@ -393,6 +454,7 @@ main() {
     create_man_page
     create_systemd_timer
     setup_shell_completion
+    create_update_script
     create_uninstall_script
     
     echo ""
