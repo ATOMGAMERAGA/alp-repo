@@ -115,7 +115,7 @@ class PackageManager:
         INSTALLED_DIR.mkdir(parents=True, exist_ok=True)
         logger.log("INFO", "Dizin yapısı oluşturuldu")
     
-    def fetch_url(self, url: str, timeout: int = 10) -> Optional[str]:
+    def fetch_url(self, url: str, timeout: int = 30) -> Optional[str]:
         """URL'den içerik indir"""
         try:
             req = urllib.request.Request(url, headers={
