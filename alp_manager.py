@@ -150,11 +150,25 @@ class PackageManager:
     
     def parse_readme(self, github_url: str) -> Optional[Dict]:
         """GitHub URL'sinden README.md'yi indir ve parse et"""
-        readme_url = github_url.replace("github.com", "raw.githubusercontent.com").rstrip('/') + "/refs/heads/main/README.md"
+        # GitHub URL'sini raw.githubusercontent.com'a dönüştür
+        # https://github.com/user/repo → https://raw.githubusercontent.com/user/repo/refs/heads/main/README.md
+        github_url = github_url.rstrip('/')
+        
+        # Eğer tree/main varsa düzelt
+        if '/tree/main' in github_url:
+            github_url = github_url.replace('/tree/main', '')
+        
+        readme_url = github_url.replace("github.com", "raw.githubusercontent.com") + "/refs/heads/main/README.md"
+        
         content = self.fetch_url(readme_url)
         if not content:
-            logger.log("WARNING", f"README.md bulunamadı: {github_url}")
-            return None
+            # Alternatif olarak master branch'i dene
+            readme_url_master = github_url.replace("github.com", "raw.githubusercontent.com") + "/refs/heads/master/README.md"
+            content = self.fetch_url(readme_url_master)
+            if not content:
+                logger.log("WARNING", f"README.md bulunamadı: {github_url}")
+                return None
+        
         return self.extract_metadata(content)
     
     def extract_metadata(self, content: str) -> Dict:
@@ -504,7 +518,6 @@ class PackageManager:
             shutil.rmtree(ALP_CACHE)
             ALP_CACHE.mkdir()
             logger.log("SUCCESS", "Cache temizlendi")
-    
     def stats(self) -> None:
         """İstatistikleri göster"""
         total_size = 0
@@ -520,6 +533,49 @@ class PackageManager:
         print(f"  {Colors.BOLD}Alp Dizini:{Colors.ENDC} {ALP_HOME}")
         print(f"  {Colors.BOLD}Son Güncelleme:{Colors.ENDC} {datetime.fromtimestamp(PACKAGES_DB.stat().st_mtime) if PACKAGES_DB.exists() else 'Hiç'}")
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}\n")
+    
+    def self_update(self) -> None:
+        """Alp'in kendisini güncelle"""
+        print(f"{Colors.BOLD}{Colors.CYAN}🔄 Alp Self-Update Başlıyor...{Colors.ENDC}\n")
+        
+        MANAGER_URL = "https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/alp_manager.py"
+        INSTALL_DIR = Path("/usr/local/lib/alp")
+        
+        try:
+            print(f"{Colors.YELLOW}→ Yeni sürüm indiriliyor...{Colors.ENDC}")
+            new_manager = INSTALL_DIR / "alp_manager.py.new"
+            
+            # Yeni sürümü indir
+            if not self.download_file(MANAGER_URL, new_manager):
+                logger.log("ERROR", "Yeni sürüm indirilemedi")
+                return
+            
+            # Syntax kontrol
+            print(f"{Colors.YELLOW}→ Syntax kontrol ediliyor...{Colors.ENDC}")
+            result = subprocess.run(
+                ["python3", "-m", "py_compile", str(new_manager)],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                logger.log("ERROR", f"Yeni sürümde syntax hatası: {result.stderr}")
+                new_manager.unlink()
+                return
+            
+            # Güncelle
+            print(f"{Colors.YELLOW}→ Güncellemesi uygulanıyor...{Colors.ENDC}")
+            import shutil as sh
+            old_manager = INSTALL_DIR / "alp_manager.py"
+            old_manager.unlink()
+            new_manager.rename(old_manager)
+            old_manager.chmod(0o755)
+            
+            logger.log("SUCCESS", "Alp başarıyla güncellendi!")
+            print(f"\n{Colors.GREEN}✅ Yeni sürüm aktif. Komutu yeniden çalıştırın.{Colors.ENDC}\n")
+            
+        except Exception as e:
+            logger.log("ERROR", f"Self-update hatası: {e}")
     
     def save_packages(self) -> None:
         """Paketleri veritabanına kaydet"""
@@ -584,6 +640,7 @@ def main():
 {Colors.BOLD}Sistem:{Colors.ENDC}
   {Colors.CYAN}stats{Colors.ENDC}              İstatistikleri göster
   {Colors.CYAN}clean{Colors.ENDC}              Cache'i temizle
+  {Colors.CYAN}self-update{Colors.ENDC}        Alp'i güncelle
   {Colors.CYAN}config{Colors.ENDC}             Ayarları göster
   {Colors.CYAN}help{Colors.ENDC}               Bu yardımı göster
 
@@ -621,6 +678,8 @@ def main():
             mgr.stats()
         elif cmd == "clean":
             mgr.clean_cache()
+        elif cmd == "self-update":
+            mgr.self_update()
         elif cmd == "config":
             print(json.dumps(mgr.config.config, indent=2))
         elif cmd == "help":
