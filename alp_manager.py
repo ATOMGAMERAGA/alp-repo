@@ -482,7 +482,8 @@ class PackageManager:
         print(f"\n{Colors.BOLD}{Colors.CYAN}📋 {package_name}{Colors.ENDC}")
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}")
         print(f"  {Colors.BOLD}Sürüm:{Colors.ENDC} {pkg.get('version', '?')}")
-        print(f"  {Colors.BOLD}Durum:{Colors.ENDC} {Colors.GREEN}Yüklü' if is_installed else Colors.RED}Yüklü Değil{Colors.ENDC}")
+        status = f"{Colors.GREEN}Yüklü{Colors.ENDC}" if is_installed else f"{Colors.RED}Yüklü Değil{Colors.ENDC}"
+        print(f"  {Colors.BOLD}Durum:{Colors.ENDC} {status}")
         print(f"  {Colors.BOLD}Açıklama:{Colors.ENDC} {pkg.get('description', '?')}")
         print(f"  {Colors.BOLD}Yazar:{Colors.ENDC} {pkg.get('author', '?')}")
         print(f"  {Colors.BOLD}Lisans:{Colors.ENDC} {pkg.get('license', 'MIT')}")
