@@ -291,10 +291,18 @@ class PackageManager:
         pkg_dir.mkdir(parents=True, exist_ok=True)
         
         # alp.sh scriptini indir
-        script_url = pkg['url'].rstrip('/') + "/refs/heads/main/alp.sh"
+        # URL'den /tree/main temizle
+        base_url = pkg['url'].rstrip('/')
+        if '/tree/main' in base_url:
+            base_url = base_url.replace('/tree/main', '')
+        
+        # raw.githubusercontent.com URL'sini oluştur
+        raw_url = base_url.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/main/alp.sh'
         script_path = ALP_CACHE / f"{package_name}_install.sh"
         
-        if not self.download_file(script_url, script_path):
+        logger.log("INFO", f"Kurulum scripti indiriliyor: {raw_url}")
+        
+        if not self.download_file(raw_url, script_path):
             logger.log("ERROR", f"Kurulum scripti indirilemedi: {package_name}")
             return False
         
@@ -345,10 +353,17 @@ class PackageManager:
         # alp_u.sh scriptini indir ve çalıştır
         if package_name in self.packages:
             pkg = self.packages[package_name]
-            uninstall_url = pkg['url'].rstrip('/') + "/refs/heads/main/alp_u.sh"
+            
+            # URL'den /tree/main temizle
+            base_url = pkg['url'].rstrip('/')
+            if '/tree/main' in base_url:
+                base_url = base_url.replace('/tree/main', '')
+            
+            # raw.githubusercontent.com URL'sini oluştur
+            raw_url = base_url.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/main/alp_u.sh'
             uninstall_path = ALP_CACHE / f"{package_name}_uninstall.sh"
             
-            if self.download_file(uninstall_url, uninstall_path):
+            if self.download_file(raw_url, uninstall_path):
                 try:
                     os.chmod(uninstall_path, 0o755)
                     result = subprocess.run(
