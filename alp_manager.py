@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import tarfile
 import tempfile
+import base64
 
 # Renkli çıktı için ANSI kodları
 class Colors:
@@ -150,11 +151,8 @@ class PackageManager:
     
     def parse_readme(self, github_url: str) -> Optional[Dict]:
         """GitHub URL'sinden README.md'yi indir ve parse et"""
-        # GitHub URL'sini raw.githubusercontent.com'a dönüştür
-        # https://github.com/user/repo → https://raw.githubusercontent.com/user/repo/refs/heads/main/README.md
         github_url = github_url.rstrip('/')
         
-        # Eğer tree/main varsa düzelt
         if '/tree/main' in github_url:
             github_url = github_url.replace('/tree/main', '')
         
@@ -162,7 +160,6 @@ class PackageManager:
         
         content = self.fetch_url(readme_url)
         if not content:
-            # Alternatif olarak master branch'i dene
             readme_url_master = github_url.replace("github.com", "raw.githubusercontent.com") + "/refs/heads/master/README.md"
             content = self.fetch_url(readme_url_master)
             if not content:
@@ -183,6 +180,7 @@ class PackageManager:
             'license': r'license\s*=\s*([^\n\s]+)',
             'dependencies': r'deps\s*=\s*\[(.+?)\]',
             'category': r'category\s*=\s*([^\n\s]+)',
+            'main': r'main\s*=\s*([^\n\s]+)',
         }
         
         for key, pattern in patterns.items():
@@ -196,9 +194,268 @@ class PackageManager:
         
         return metadata
     
+    def compile_package(self, directory: str) -> bool:
+        """Paket dizinini .alp dosyasına derle"""
+        dir_path = Path(directory)
+        
+        if not dir_path.exists() or not dir_path.is_dir():
+            logger.log("ERROR", f"Dizin bulunamadı: {directory}")
+            return False
+        
+        # Gerekli dosyaları kontrol et
+        alp_sh = dir_path / "alp.sh"
+        alp_u_sh = dir_path / "alp_u.sh"
+        readme = dir_path / "README.md"
+        
+        missing_files = []
+        if not alp_sh.exists():
+            missing_files.append("alp.sh")
+        if not alp_u_sh.exists():
+            missing_files.append("alp_u.sh")
+        if not readme.exists():
+            missing_files.append("README.md")
+        
+        if missing_files:
+            logger.log("ERROR", f"Eksik dosyalar: {', '.join(missing_files)}")
+            return False
+        
+        # README'den metadata çıkar
+        with open(readme, 'r', encoding='utf-8') as f:
+            readme_content = f.read()
+        
+        metadata = self.extract_metadata(readme_content)
+        
+        if 'name' not in metadata or 'version' not in metadata:
+            logger.log("ERROR", "README.md'de 'name' ve 'ver' alanları zorunludur!")
+            print(f"{Colors.YELLOW}Örnek README.md formatı:{Colors.ENDC}")
+            print("name = myapp")
+            print("ver = 1.0.0")
+            print("des = Uygulama açıklaması")
+            print("main = myapp.py  (opsiyonel)")
+            return False
+        
+        package_name = metadata['name']
+        version = metadata['version']
+        output_file = Path.cwd() / f"{package_name}-{version}.alp"
+        
+        print(f"{Colors.BOLD}{Colors.CYAN}📦 Paket derleniyor: {package_name} v{version}{Colors.ENDC}")
+        
+        # Dosyaları oku ve base64 encode et
+        try:
+            with open(alp_sh, 'rb') as f:
+                install_script = base64.b64encode(f.read()).decode('utf-8')
+            
+            with open(alp_u_sh, 'rb') as f:
+                uninstall_script = base64.b64encode(f.read()).decode('utf-8')
+            
+            # Ana dosyayı kontrol et (opsiyonel)
+            main_file_content = None
+            main_file_name = None
+            if 'main' in metadata:
+                main_file = dir_path / metadata['main']
+                if main_file.exists():
+                    with open(main_file, 'rb') as f:
+                        main_file_content = base64.b64encode(f.read()).decode('utf-8')
+                    main_file_name = metadata['main']
+                    print(f"{Colors.GREEN}✓{Colors.ENDC} Ana dosya bulundu: {main_file_name}")
+                else:
+                    logger.log("WARNING", f"Ana dosya bulunamadı: {metadata['main']}")
+            
+            # .alp paketi oluştur (JSON formatı)
+            alp_package = {
+                "format_version": "1.1",
+                "metadata": metadata,
+                "files": {
+                    "install_script": install_script,
+                    "uninstall_script": uninstall_script,
+                    "readme": readme_content
+                },
+                "compiled_at": datetime.now().isoformat(),
+                "checksum": ""
+            }
+            
+            # Ana dosya varsa ekle
+            if main_file_content and main_file_name:
+                alp_package["files"]["main_file"] = main_file_content
+                alp_package["files"]["main_file_name"] = main_file_name
+            
+            # JSON'u string'e çevir
+            package_json = json.dumps(alp_package, indent=2, ensure_ascii=False)
+            
+            # Checksum hesapla
+            checksum = hashlib.sha256(package_json.encode()).hexdigest()
+            alp_package["checksum"] = checksum
+            
+            # Dosyaya yaz
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(alp_package, f, indent=2, ensure_ascii=False)
+            
+            file_size = output_file.stat().st_size / 1024
+            
+            logger.log("SUCCESS", f"Paket oluşturuldu: {output_file.name}")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} Dosya: {output_file}")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} Boyut: {file_size:.2f} KB")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} Checksum: {checksum[:16]}...")
+            if main_file_name:
+                print(f"{Colors.GREEN}✓{Colors.ENDC} Ana dosya: {main_file_name}")
+            print(f"\n{Colors.BOLD}Kurulum:{Colors.ENDC} alp install-local {output_file}")
+            
+            return True
+            
+        except Exception as e:
+            logger.log("ERROR", f"Paket derlenemedi: {e}")
+            return False
+    
+    def install_local_package(self, alp_file: str) -> bool:
+        """Yerel .alp dosyasını kur"""
+        alp_path = Path(alp_file)
+        
+        if not alp_path.exists():
+            logger.log("ERROR", f".alp dosyası bulunamadı: {alp_file}")
+            return False
+        
+        if not alp_path.suffix == '.alp':
+            logger.log("ERROR", "Dosya uzantısı .alp olmalıdır")
+            return False
+        
+        try:
+            # .alp dosyasını oku
+            with open(alp_path, 'r', encoding='utf-8') as f:
+                alp_package = json.load(f)
+            
+            # Format kontrolü
+            format_version = alp_package.get("format_version", "1.0")
+            if format_version not in ["1.0", "1.1"]:
+                logger.log("ERROR", "Desteklenmeyen paket formatı")
+                return False
+            
+            metadata = alp_package["metadata"]
+            package_name = metadata["name"]
+            version = metadata.get("version", "unknown")
+            
+            # Zaten yüklü mü kontrol et
+            if package_name in self.installed:
+                logger.log("WARNING", f"Paket zaten yüklü: {package_name}")
+                response = input(f"Yeniden yüklemek ister misiniz? (e/h): ")
+                if response.lower() != 'e':
+                    return False
+                self.remove(package_name)
+            
+            print(f"{Colors.BOLD}{Colors.BLUE}📥 Yükleniyor: {package_name} ({version}){Colors.ENDC}")
+            
+            # Geçici dizin oluştur
+            temp_dir = ALP_CACHE / f"install_{package_name}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Scriptleri decode et ve kaydet
+            install_script = temp_dir / "alp.sh"
+            uninstall_script = temp_dir / "alp_u.sh"
+            
+            install_data = base64.b64decode(alp_package["files"]["install_script"])
+            uninstall_data = base64.b64decode(alp_package["files"]["uninstall_script"])
+            
+            with open(install_script, 'wb') as f:
+                f.write(install_data)
+            
+            with open(uninstall_script, 'wb') as f:
+                f.write(uninstall_data)
+            
+            # Ana dosyayı çıkar (varsa)
+            main_file_path = None
+            if "main_file" in alp_package["files"] and "main_file_name" in alp_package["files"]:
+                main_file_name = alp_package["files"]["main_file_name"]
+                main_file_data = base64.b64decode(alp_package["files"]["main_file"])
+                main_file_path = temp_dir / main_file_name
+                
+                with open(main_file_path, 'wb') as f:
+                    f.write(main_file_data)
+                
+                # Dosya uzantısına göre izinleri ayarla
+                if main_file_name.endswith('.sh') or main_file_name.endswith('.py'):
+                    os.chmod(main_file_path, 0o755)
+                
+                print(f"{Colors.GREEN}✓{Colors.ENDC} Ana dosya çıkarıldı: {main_file_name}")
+            
+            # İzinleri ayarla
+            os.chmod(install_script, 0o755)
+            os.chmod(uninstall_script, 0o755)
+            
+            # Ana dosya yolunu environment variable olarak belirt
+            env = os.environ.copy()
+            if main_file_path:
+                env['ALP_MAIN_FILE'] = str(main_file_path)
+                env['ALP_MAIN_NAME'] = main_file_path.name
+            
+            # Kurulum scriptini çalıştır
+            print(f"{Colors.YELLOW}→ Kurulum scripti çalıştırılıyor...{Colors.ENDC}")
+            result = subprocess.run(
+                [str(install_script)],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env
+            )
+            
+            if result.returncode == 0:
+                # Paket dizinini oluştur
+                pkg_dir = INSTALLED_DIR / package_name
+                pkg_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Uninstall scriptini kopyala
+                shutil.copy2(uninstall_script, pkg_dir / "alp_u.sh")
+                
+                # Ana dosyayı kopyala (varsa)
+                if main_file_path and main_file_path.exists():
+                    shutil.copy2(main_file_path, pkg_dir / main_file_path.name)
+                
+                # README'yi kaydet
+                with open(pkg_dir / "README.md", 'w', encoding='utf-8') as f:
+                    f.write(alp_package["files"]["readme"])
+                
+                # Metadata kaydet
+                install_info = {
+                    **metadata,
+                    'installed_at': datetime.now().isoformat(),
+                    'source': 'local',
+                    'alp_file': str(alp_path.absolute()),
+                    'checksum': alp_package.get("checksum", "")
+                }
+                
+                with open(pkg_dir / "installed.json", 'w') as f:
+                    json.dump(install_info, f, indent=2)
+                
+                # Veritabanını güncelle
+                self.installed[package_name] = install_info
+                self.save_installed()
+                
+                # Geçici dosyaları temizle
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                
+                logger.log("SUCCESS", f"{package_name} başarıyla yüklendi")
+                
+                # Ana dosya kurulduysa bilgi ver
+                if 'main' in metadata:
+                    print(f"\n{Colors.CYAN}ℹ️  Ana program: {metadata['main']}{Colors.ENDC}")
+                    if metadata['main'].endswith('.py'):
+                        print(f"{Colors.YELLOW}   Çalıştırmak için: python3 {metadata['main']}{Colors.ENDC}")
+                    elif metadata['main'].endswith('.sh'):
+                        print(f"{Colors.YELLOW}   Çalıştırmak için: ./{metadata['main']}{Colors.ENDC}")
+                
+                return True
+            else:
+                logger.log("ERROR", f"Kurulum başarısız: {result.stderr}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False
+                
+        except json.JSONDecodeError:
+            logger.log("ERROR", "Geçersiz .alp dosya formatı")
+            return False
+        except Exception as e:
+            logger.log("ERROR", f"Kurulum hatası: {e}")
+            return False
+    
     def update_repo(self, force: bool = False) -> bool:
         """Depoyu güncelle"""
-        # Son güncelleme zamanını kontrol et
         if not force and INSTALLED_DB.exists():
             stat = INSTALLED_DB.stat()
             if time.time() - stat.st_mtime < self.config.get("update_interval"):
@@ -274,10 +531,9 @@ class PackageManager:
             self.search(package_name)
             return False
         
-        # Bağımlılıkları yükle
         if install_deps:
             install_order = self.resolve_dependencies(package_name)
-            for pkg in install_order[:-1]:  # Son paket kendisi
+            for pkg in install_order[:-1]:
                 if pkg not in self.installed:
                     print(f"{Colors.YELLOW}→ Bağımlılık yükleniyor: {pkg}{Colors.ENDC}")
                     if not self.install(pkg, install_deps=False):
@@ -290,13 +546,10 @@ class PackageManager:
         pkg_dir = INSTALLED_DIR / package_name
         pkg_dir.mkdir(parents=True, exist_ok=True)
         
-        # alp.sh scriptini indir
-        # URL'den /tree/main temizle
         base_url = pkg['url'].rstrip('/')
         if '/tree/main' in base_url:
             base_url = base_url.replace('/tree/main', '')
         
-        # raw.githubusercontent.com URL'sini oluştur
         raw_url = base_url.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/main/alp.sh'
         script_path = ALP_CACHE / f"{package_name}_install.sh"
         
@@ -306,7 +559,6 @@ class PackageManager:
             logger.log("ERROR", f"Kurulum scripti indirilemedi: {package_name}")
             return False
         
-        # Scripti çalıştır
         try:
             os.chmod(script_path, 0o755)
             result = subprocess.run(
@@ -317,7 +569,6 @@ class PackageManager:
             )
             
             if result.returncode == 0:
-                # Metadata kaydet
                 install_info = {
                     **pkg,
                     'installed_at': datetime.now().isoformat(),
@@ -350,16 +601,13 @@ class PackageManager:
         
         print(f"{Colors.BOLD}{Colors.RED}🗑️  Kaldırılıyor: {package_name}{Colors.ENDC}")
         
-        # alp_u.sh scriptini indir ve çalıştır
         if package_name in self.packages:
             pkg = self.packages[package_name]
             
-            # URL'den /tree/main temizle
             base_url = pkg['url'].rstrip('/')
             if '/tree/main' in base_url:
                 base_url = base_url.replace('/tree/main', '')
             
-            # raw.githubusercontent.com URL'sini oluştur
             raw_url = base_url.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/main/alp_u.sh'
             uninstall_path = ALP_CACHE / f"{package_name}_uninstall.sh"
             
@@ -377,10 +625,8 @@ class PackageManager:
                 except Exception as e:
                     logger.log("WARNING", f"Kaldırma scripti çalıştırılamadı: {e}")
         
-        # Dizini sil
         shutil.rmtree(pkg_dir, ignore_errors=True)
         
-        # Veritabanından sil
         if package_name in self.installed:
             del self.installed[package_name]
             self.save_installed()
@@ -519,6 +765,9 @@ class PackageManager:
         print(f"  {Colors.BOLD}Kategori:{Colors.ENDC} {pkg.get('category', 'misc')}")
         print(f"  {Colors.BOLD}URL:{Colors.ENDC} {pkg['url']}")
         
+        if pkg.get('main'):
+            print(f"  {Colors.BOLD}Ana Dosya:{Colors.ENDC} {pkg['main']}")
+        
         if pkg.get('dependencies'):
             print(f"  {Colors.BOLD}Bağımlılıklar:{Colors.ENDC}")
             for dep in pkg['dependencies']:
@@ -533,6 +782,7 @@ class PackageManager:
             shutil.rmtree(ALP_CACHE)
             ALP_CACHE.mkdir()
             logger.log("SUCCESS", "Cache temizlendi")
+    
     def stats(self) -> None:
         """İstatistikleri göster"""
         total_size = 0
@@ -560,12 +810,10 @@ class PackageManager:
             print(f"{Colors.YELLOW}→ Yeni sürüm indiriliyor...{Colors.ENDC}")
             new_manager = INSTALL_DIR / "alp_manager.py.new"
             
-            # Yeni sürümü indir
             if not self.download_file(MANAGER_URL, new_manager):
                 logger.log("ERROR", "Yeni sürüm indirilemedi")
                 return
             
-            # Syntax kontrol
             print(f"{Colors.YELLOW}→ Syntax kontrol ediliyor...{Colors.ENDC}")
             result = subprocess.run(
                 ["python3", "-m", "py_compile", str(new_manager)],
@@ -578,9 +826,7 @@ class PackageManager:
                 new_manager.unlink()
                 return
             
-            # Güncelle
             print(f"{Colors.YELLOW}→ Güncellemesi uygulanıyor...{Colors.ENDC}")
-            import shutil as sh
             old_manager = INSTALL_DIR / "alp_manager.py"
             old_manager.unlink()
             new_manager.rename(old_manager)
@@ -630,7 +876,7 @@ def print_banner():
 ██║  ██║███████╗██║     
 ╚═╝  ╚═╝╚══════╝╚═╝     
 {Colors.ENDC}
-{Colors.BOLD}Alp Package Manager v2.0{Colors.ENDC}
+{Colors.BOLD}Alp Package Manager v2.1{Colors.ENDC}
 {Colors.YELLOW}Advanced Linux Package Management System{Colors.ENDC}
 """)
 
@@ -640,28 +886,34 @@ def main():
         print(f"""{Colors.BOLD}Kullanım: alp <komut> [argümanlar]{Colors.ENDC}
 
 {Colors.BOLD}Paket Yönetimi:{Colors.ENDC}
-  {Colors.CYAN}update{Colors.ENDC}              Depoyu güncelle
-  {Colors.CYAN}install <paket>{Colors.ENDC}     Paket yükle
-  {Colors.CYAN}remove <paket>{Colors.ENDC}      Paket kaldır
-  {Colors.CYAN}upgrade [paket]{Colors.ENDC}     Paket güncelle (tümü veya belirli)
+  {Colors.CYAN}update{Colors.ENDC}                  Depoyu güncelle
+  {Colors.CYAN}install <paket>{Colors.ENDC}         Paket yükle
+  {Colors.CYAN}remove <paket>{Colors.ENDC}          Paket kaldır
+  {Colors.CYAN}upgrade [paket]{Colors.ENDC}         Paket güncelle (tümü veya belirli)
   
 {Colors.BOLD}Paket İşlemleri:{Colors.ENDC}
-  {Colors.CYAN}list{Colors.ENDC}                Tüm paketleri listele
-  {Colors.CYAN}list <kategori>{Colors.ENDC}    Kategoriye göre listele
-  {Colors.CYAN}installed{Colors.ENDC}          Yüklü paketleri listele
-  {Colors.CYAN}search <anahtar>{Colors.ENDC}   Paket ara
-  {Colors.CYAN}info <paket>{Colors.ENDC}       Paket detaylarını göster
+  {Colors.CYAN}list{Colors.ENDC}                    Tüm paketleri listele
+  {Colors.CYAN}list <kategori>{Colors.ENDC}        Kategoriye göre listele
+  {Colors.CYAN}installed{Colors.ENDC}              Yüklü paketleri listele
+  {Colors.CYAN}search <anahtar>{Colors.ENDC}       Paket ara
+  {Colors.CYAN}info <paket>{Colors.ENDC}           Paket detaylarını göster
+  
+{Colors.BOLD}Geliştirici Araçları:{Colors.ENDC}
+  {Colors.CYAN}compile <dizin>{Colors.ENDC}        Paket dizinini .alp dosyasına derle
+  {Colors.CYAN}install-local <dosya>{Colors.ENDC}  Yerel .alp dosyasını kur
   
 {Colors.BOLD}Sistem:{Colors.ENDC}
-  {Colors.CYAN}stats{Colors.ENDC}              İstatistikleri göster
-  {Colors.CYAN}clean{Colors.ENDC}              Cache'i temizle
-  {Colors.CYAN}self-update{Colors.ENDC}        Alp'i güncelle
-  {Colors.CYAN}config{Colors.ENDC}             Ayarları göster
-  {Colors.CYAN}help{Colors.ENDC}               Bu yardımı göster
+  {Colors.CYAN}stats{Colors.ENDC}                  İstatistikleri göster
+  {Colors.CYAN}clean{Colors.ENDC}                  Cache'i temizle
+  {Colors.CYAN}self-update{Colors.ENDC}            Alp'i güncelle
+  {Colors.CYAN}config{Colors.ENDC}                 Ayarları göster
+  {Colors.CYAN}help{Colors.ENDC}                   Bu yardımı göster
 
 {Colors.BOLD}Örnekler:{Colors.ENDC}
   alp update
   alp install myapp
+  alp compile ./myapp-project
+  alp install-local myapp-1.0.0.alp
   alp remove myapp
   alp upgrade
   alp search web
@@ -689,6 +941,10 @@ def main():
             mgr.search(sys.argv[2])
         elif cmd == "info" and len(sys.argv) > 2:
             mgr.show_info(sys.argv[2])
+        elif cmd == "compile" and len(sys.argv) > 2:
+            mgr.compile_package(sys.argv[2])
+        elif cmd == "install-local" and len(sys.argv) > 2:
+            mgr.install_local_package(sys.argv[2])
         elif cmd == "stats":
             mgr.stats()
         elif cmd == "clean":
