@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Alp Package Manager - Advanced Linux Package Management System
-GitHub entegrasyonu, bağımlılık yönetimi, otomatik güncellemeler ve daha fazlası
+GitHub entegrasyonu, bağımlılık yönetimi, otomatik güncellemeler ve sertifika sistemi
 """
 
 import os
@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 import tarfile
 import tempfile
 import base64
+import secrets
 
 # Renkli çıktı için ANSI kodları
 class Colors:
@@ -41,6 +42,10 @@ PACKAGES_DB = ALP_HOME / "packages.json"
 INSTALLED_DB = ALP_HOME / "installed.json"
 CONFIG_FILE = ALP_HOME / "config.json"
 INSTALLED_DIR = ALP_HOME / "installed"
+CERTIFICATES_DB = ALP_HOME / "certificates.json"
+
+# Official Sertifika için şifreli anahtar (SHA-256)
+OFFICIAL_CERT_KEY = "cefa8faf107f512c2382150e70953e5839d882698709d6accc1ad49651732c95"  # "password" kelimesinin SHA-256 hash'i
 
 class Logger:
     """Gelişmiş loglama sistemi"""
@@ -63,6 +68,112 @@ class Logger:
             print(f"{Colors.GREEN}✅ {message}{Colors.ENDC}")
 
 logger = Logger()
+
+class CertificateManager:
+    """Paket sertifika yönetim sistemi"""
+    
+    def __init__(self):
+        self.certificates = self.load_certificates()
+    
+    def load_certificates(self) -> Dict:
+        """Sertifika veritabanını yükle"""
+        if CERTIFICATES_DB.exists():
+            try:
+                with open(CERTIFICATES_DB, 'r') as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+    
+    def save_certificates(self):
+        """Sertifika veritabanını kaydet"""
+        CERTIFICATES_DB.parent.mkdir(parents=True, exist_ok=True)
+        with open(CERTIFICATES_DB, 'w') as f:
+            json.dump(self.certificates, f, indent=2, ensure_ascii=False)
+    
+    def generate_certificate(self, package_name: str, author: str, cert_type: str = "custom") -> Dict:
+        """Yeni bir sertifika oluştur"""
+        cert_id = secrets.token_hex(16)
+        timestamp = datetime.now().isoformat()
+        
+        # Sertifika verisi
+        cert_data = {
+            "cert_id": cert_id,
+            "package_name": package_name,
+            "author": author,
+            "type": cert_type,  # "custom" veya "official"
+            "issued_at": timestamp,
+            "signature": self._generate_signature(package_name, author, timestamp)
+        }
+        
+        return cert_data
+    
+    def _generate_signature(self, package_name: str, author: str, timestamp: str) -> str:
+        """Sertifika imzası oluştur"""
+        data = f"{package_name}|{author}|{timestamp}"
+        return hashlib.sha256(data.encode()).hexdigest()
+    
+    def verify_certificate(self, cert_data: Dict) -> Tuple[bool, str]:
+        """Sertifika doğrulama"""
+        if not cert_data:
+            return False, "Sertifika bulunamadı"
+        
+        # İmza doğrulama
+        expected_sig = self._generate_signature(
+            cert_data.get("package_name", ""),
+            cert_data.get("author", ""),
+            cert_data.get("issued_at", "")
+        )
+        
+        if cert_data.get("signature") != expected_sig:
+            return False, "Sertifika imzası geçersiz"
+        
+        # Sertifika tipine göre doğrulama
+        if cert_data.get("type") == "official":
+            return True, "Official Alp Sertifikalı Paket ✓"
+        else:
+            return True, f"Sertifikalı Paket - {cert_data.get('author')} tarafından imzalanmış ✓"
+    
+    def register_certificate(self, package_name: str, cert_data: Dict):
+        """Sertifikayı kaydet"""
+        self.certificates[package_name] = cert_data
+        self.save_certificates()
+    
+    def get_certificate(self, package_name: str) -> Optional[Dict]:
+        """Paket sertifikasını getir"""
+        return self.certificates.get(package_name)
+    
+    def show_certificate_info(self, package_name: str):
+        """Sertifika bilgilerini göster"""
+        cert = self.get_certificate(package_name)
+        
+        if not cert:
+            print(f"{Colors.RED}⚠️  Bu paket sertifikalı değil!{Colors.ENDC}")
+            print(f"{Colors.YELLOW}   Paketin nereden geldiği belirsiz ve güvenli olmayabilir.{Colors.ENDC}")
+            return
+        
+        is_valid, message = self.verify_certificate(cert)
+        
+        if not is_valid:
+            print(f"{Colors.RED}⚠️  Sertifika geçersiz: {message}{Colors.ENDC}")
+            return
+        
+        print(f"\n{Colors.BOLD}{Colors.GREEN}🔒 Sertifika Bilgileri{Colors.ENDC}")
+        print(f"{Colors.BOLD}{'-' * 60}{Colors.ENDC}")
+        
+        if cert.get("type") == "official":
+            print(f"{Colors.GREEN}  🏆 Official Alp Certified Package{Colors.ENDC}")
+            print(f"{Colors.CYAN}  Bu paket resmi olarak Alp tarafından onaylanmıştır{Colors.ENDC}")
+        else:
+            print(f"{Colors.CYAN}  ✓ Sertifikalı Paket{Colors.ENDC}")
+        
+        print(f"\n  {Colors.BOLD}Sertifika ID:{Colors.ENDC} {cert.get('cert_id')}")
+        print(f"  {Colors.BOLD}Paket Adı:{Colors.ENDC} {cert.get('package_name')}")
+        print(f"  {Colors.BOLD}Yazar:{Colors.ENDC} {cert.get('author')}")
+        print(f"  {Colors.BOLD}Düzenlenme Tarihi:{Colors.ENDC} {cert.get('issued_at')[:10]}")
+        print(f"  {Colors.BOLD}İmza:{Colors.ENDC} {cert.get('signature')[:32]}...")
+        print(f"\n{Colors.GREEN}  ✓ Sertifika doğrulandı: {message}{Colors.ENDC}")
+        print(f"{Colors.BOLD}{'-' * 60}{Colors.ENDC}\n")
 
 class Config:
     """Yapılandırma yönetimi"""
@@ -103,6 +214,7 @@ class Config:
 class PackageManager:
     def __init__(self):
         self.config = Config()
+        self.cert_manager = CertificateManager()
         self.setup_home()
         self.packages = {}
         self.installed = {}
@@ -194,8 +306,8 @@ class PackageManager:
         
         return metadata
     
-    def compile_package(self, directory: str) -> bool:
-        """Paket dizinini .alp dosyasına derle"""
+    def compile_package(self, directory: str, add_certificate: bool = True) -> bool:
+        """Paket dizinini .alp dosyasına derle ve sertifikala"""
         dir_path = Path(directory)
         
         if not dir_path.exists() or not dir_path.is_dir():
@@ -231,14 +343,40 @@ class PackageManager:
             print("name = myapp")
             print("ver = 1.0.0")
             print("des = Uygulama açıklaması")
+            print("author = Sizin İsminiz")
             print("main = myapp.py  (opsiyonel)")
             return False
         
         package_name = metadata['name']
         version = metadata['version']
+        author = metadata.get('author', 'Unknown')
         output_file = Path.cwd() / f"{package_name}-{version}.alp"
         
         print(f"{Colors.BOLD}{Colors.CYAN}📦 Paket derleniyor: {package_name} v{version}{Colors.ENDC}")
+        
+        # Sertifika işlemleri
+        certificate = None
+        if add_certificate:
+            print(f"\n{Colors.BOLD}{Colors.YELLOW}🔒 Sertifika Sistemi{Colors.ENDC}")
+            print(f"{Colors.CYAN}Bu paketin sertifikalanmasını ister misiniz?{Colors.ENDC}")
+            print(f"{Colors.YELLOW}Sertifikasız paketler kurulurken uyarı verir ve nereden geldiği belli olmaz.{Colors.ENDC}")
+            
+            cert_choice = input(f"\n1) Özel Sertifika (Kendi isminizle)\n2) Official Alp Sertifikası (Şifre gerekli)\n3) Sertifikasız\n\nSeçiminiz (1/2/3): ").strip()
+            
+            if cert_choice == "1":
+                author_name = input(f"İmzalayan kişinin adı [{author}]: ").strip() or author
+                certificate = self.cert_manager.generate_certificate(package_name, author_name, "custom")
+                print(f"{Colors.GREEN}✓ Özel sertifika oluşturuldu{Colors.ENDC}")
+            
+            elif cert_choice == "2":
+                password = input("Official sertifika şifresini girin: ").strip()
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                
+                if password_hash == OFFICIAL_CERT_KEY:
+                    certificate = self.cert_manager.generate_certificate(package_name, "Alp Official", "official")
+                    print(f"{Colors.GREEN}✓ Official Alp sertifikası oluşturuldu 🏆{Colors.ENDC}")
+                else:
+                    print(f"{Colors.RED}✗ Hatalı şifre! Sertifikasız devam ediliyor.{Colors.ENDC}")
         
         # Dosyaları oku ve base64 encode et
         try:
@@ -263,13 +401,14 @@ class PackageManager:
             
             # .alp paketi oluştur (JSON formatı)
             alp_package = {
-                "format_version": "1.1",
+                "format_version": "1.2",
                 "metadata": metadata,
                 "files": {
                     "install_script": install_script,
                     "uninstall_script": uninstall_script,
                     "readme": readme_content
                 },
+                "certificate": certificate,
                 "compiled_at": datetime.now().isoformat(),
                 "checksum": ""
             }
@@ -293,9 +432,18 @@ class PackageManager:
             file_size = output_file.stat().st_size / 1024
             
             logger.log("SUCCESS", f"Paket oluşturuldu: {output_file.name}")
-            print(f"{Colors.GREEN}✓{Colors.ENDC} Dosya: {output_file}")
+            print(f"\n{Colors.GREEN}✓{Colors.ENDC} Dosya: {output_file}")
             print(f"{Colors.GREEN}✓{Colors.ENDC} Boyut: {file_size:.2f} KB")
             print(f"{Colors.GREEN}✓{Colors.ENDC} Checksum: {checksum[:16]}...")
+            
+            if certificate:
+                if certificate.get("type") == "official":
+                    print(f"{Colors.GREEN}✓{Colors.ENDC} Sertifika: {Colors.BOLD}Official Alp Certified 🏆{Colors.ENDC}")
+                else:
+                    print(f"{Colors.GREEN}✓{Colors.ENDC} Sertifika: Özel ({certificate.get('author')})")
+            else:
+                print(f"{Colors.YELLOW}⚠{Colors.ENDC}  Sertifika: Yok (Kurulumda uyarı verilecek)")
+            
             if main_file_name:
                 print(f"{Colors.GREEN}✓{Colors.ENDC} Ana dosya: {main_file_name}")
             print(f"\n{Colors.BOLD}Kurulum:{Colors.ENDC} alp install-local {output_file}")
@@ -325,13 +473,39 @@ class PackageManager:
             
             # Format kontrolü
             format_version = alp_package.get("format_version", "1.0")
-            if format_version not in ["1.0", "1.1"]:
+            if format_version not in ["1.0", "1.1", "1.2"]:
                 logger.log("ERROR", "Desteklenmeyen paket formatı")
                 return False
             
             metadata = alp_package["metadata"]
             package_name = metadata["name"]
             version = metadata.get("version", "unknown")
+            
+            # Sertifika kontrolü
+            certificate = alp_package.get("certificate")
+            
+            print(f"{Colors.BOLD}{Colors.BLUE}📥 Yükleniyor: {package_name} ({version}){Colors.ENDC}\n")
+            
+            if certificate:
+                is_valid, message = self.cert_manager.verify_certificate(certificate)
+                if is_valid:
+                    if certificate.get("type") == "official":
+                        print(f"{Colors.GREEN}🏆 Official Alp Certified Package{Colors.ENDC}")
+                    else:
+                        print(f"{Colors.GREEN}🔒 Sertifikalı Paket - {certificate.get('author')}{Colors.ENDC}")
+                    print(f"{Colors.CYAN}   {message}{Colors.ENDC}\n")
+                else:
+                    print(f"{Colors.RED}⚠️  Sertifika doğrulaması başarısız: {message}{Colors.ENDC}")
+                    response = input("Yine de devam etmek istiyor musunuz? (e/h): ")
+                    if response.lower() != 'e':
+                        return False
+            else:
+                print(f"{Colors.YELLOW}⚠️  Bu paket sertifikalı değil!{Colors.ENDC}")
+                print(f"{Colors.YELLOW}   Paketin nereden geldiği belirsiz ve güvenli olmayabilir.{Colors.ENDC}")
+                response = input(f"{Colors.YELLOW}   Yine de kurmak istiyor musunuz? (e/h): {Colors.ENDC}")
+                if response.lower() != 'e':
+                    return False
+                print()
             
             # Zaten yüklü mü kontrol et
             if package_name in self.installed:
@@ -340,8 +514,6 @@ class PackageManager:
                 if response.lower() != 'e':
                     return False
                 self.remove(package_name)
-            
-            print(f"{Colors.BOLD}{Colors.BLUE}📥 Yükleniyor: {package_name} ({version}){Colors.ENDC}")
             
             # Geçici dizin oluştur
             temp_dir = ALP_CACHE / f"install_{package_name}"
@@ -418,11 +590,17 @@ class PackageManager:
                     'installed_at': datetime.now().isoformat(),
                     'source': 'local',
                     'alp_file': str(alp_path.absolute()),
-                    'checksum': alp_package.get("checksum", "")
+                    'checksum': alp_package.get("checksum", ""),
+                    'certified': certificate is not None,
+                    'cert_type': certificate.get("type") if certificate else None
                 }
                 
                 with open(pkg_dir / "installed.json", 'w') as f:
                     json.dump(install_info, f, indent=2)
+                
+                # Sertifikayı kaydet
+                if certificate:
+                    self.cert_manager.register_certificate(package_name, certificate)
                 
                 # Veritabanını güncelle
                 self.installed[package_name] = install_info
@@ -718,7 +896,15 @@ class PackageManager:
             installed_at = info.get('installed_at', '?')
             size = sum(f.stat().st_size for f in (INSTALLED_DIR / name).rglob('*') if f.is_file()) / 1024 / 1024
             
-            print(f"{Colors.GREEN}✓{Colors.ENDC} {Colors.BOLD}{name}{Colors.ENDC:24} {ver:8} ({size:.2f}MB)")
+            # Sertifika durumu
+            cert_icon = ""
+            if info.get('certified'):
+                if info.get('cert_type') == 'official':
+                    cert_icon = f" {Colors.GREEN}🏆{Colors.ENDC}"
+                else:
+                    cert_icon = f" {Colors.CYAN}🔒{Colors.ENDC}"
+            
+            print(f"{Colors.GREEN}✓{Colors.ENDC} {Colors.BOLD}{name}{Colors.ENDC:24} {ver:8} ({size:.2f}MB){cert_icon}")
             print(f"   └─ Yükleme tarihi: {installed_at[:10]}")
         
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}\n")
@@ -774,6 +960,17 @@ class PackageManager:
                 status = f"{Colors.GREEN}✓{Colors.ENDC}" if dep in self.installed else f"{Colors.RED}✗{Colors.ENDC}"
                 print(f"    {status} {dep}")
         
+        # Sertifika bilgisi
+        if is_installed:
+            cert = self.cert_manager.get_certificate(package_name)
+            if cert:
+                if cert.get("type") == "official":
+                    print(f"  {Colors.BOLD}Sertifika:{Colors.ENDC} {Colors.GREEN}Official Alp Certified 🏆{Colors.ENDC}")
+                else:
+                    print(f"  {Colors.BOLD}Sertifika:{Colors.ENDC} {Colors.CYAN}Özel ({cert.get('author')}) 🔒{Colors.ENDC}")
+            else:
+                print(f"  {Colors.BOLD}Sertifika:{Colors.ENDC} {Colors.YELLOW}Yok ⚠️{Colors.ENDC}")
+        
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}\n")
     
     def clean_cache(self) -> None:
@@ -790,10 +987,15 @@ class PackageManager:
             if pkg_dir.is_dir():
                 total_size += sum(f.stat().st_size for f in pkg_dir.rglob("*") if f.is_file())
         
+        # Sertifika istatistikleri
+        certified_count = sum(1 for info in self.installed.values() if info.get('certified'))
+        official_count = sum(1 for info in self.installed.values() if info.get('cert_type') == 'official')
+        
         print(f"\n{Colors.BOLD}{Colors.CYAN}📊 Alp İstatistikleri:{Colors.ENDC}")
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}")
         print(f"  {Colors.BOLD}Toplam Paket:{Colors.ENDC} {len(self.packages)}")
         print(f"  {Colors.BOLD}Yüklü Paket:{Colors.ENDC} {len(self.installed)}")
+        print(f"  {Colors.BOLD}Sertifikalı Paket:{Colors.ENDC} {certified_count} ({Colors.GREEN}🏆 Official: {official_count}{Colors.ENDC})")
         print(f"  {Colors.BOLD}Kullanılan Alan:{Colors.ENDC} {total_size / 1024 / 1024:.2f} MB")
         print(f"  {Colors.BOLD}Alp Dizini:{Colors.ENDC} {ALP_HOME}")
         print(f"  {Colors.BOLD}Son Güncelleme:{Colors.ENDC} {datetime.fromtimestamp(PACKAGES_DB.stat().st_mtime) if PACKAGES_DB.exists() else 'Hiç'}")
@@ -876,8 +1078,9 @@ def print_banner():
 ██║  ██║███████╗██║     
 ╚═╝  ╚═╝╚══════╝╚═╝     
 {Colors.ENDC}
-{Colors.BOLD}Alp Package Manager v2.1{Colors.ENDC}
+{Colors.BOLD}Alp Package Manager v2.2{Colors.ENDC}
 {Colors.YELLOW}Advanced Linux Package Management System{Colors.ENDC}
+{Colors.GREEN}🔒 Certificate System Enabled{Colors.ENDC}
 """)
 
 def main():
@@ -902,6 +1105,12 @@ def main():
   {Colors.CYAN}compile <dizin>{Colors.ENDC}        Paket dizinini .alp dosyasına derle
   {Colors.CYAN}install-local <dosya>{Colors.ENDC}  Yerel .alp dosyasını kur
   
+{Colors.BOLD}Sertifika Sistemi:{Colors.ENDC}
+  {Colors.CYAN}cert-info <paket>{Colors.ENDC}      Paket sertifikasını göster
+  {Colors.GREEN}🏆 Official{Colors.ENDC}             Resmi Alp sertifikalı paketler
+  {Colors.CYAN}🔒 Custom{Colors.ENDC}               Geliştirici tarafından imzalı paketler
+  {Colors.YELLOW}⚠️  Unsigned{Colors.ENDC}            Sertifikasız paketler (Uyarı verir)
+  
 {Colors.BOLD}Sistem:{Colors.ENDC}
   {Colors.CYAN}stats{Colors.ENDC}                  İstatistikleri göster
   {Colors.CYAN}clean{Colors.ENDC}                  Cache'i temizle
@@ -912,8 +1121,9 @@ def main():
 {Colors.BOLD}Örnekler:{Colors.ENDC}
   alp update
   alp install myapp
-  alp compile ./myapp-project
+  alp compile ./myapp-project    {Colors.YELLOW}# Sertifikalama seçeneği ile{Colors.ENDC}
   alp install-local myapp-1.0.0.alp
+  alp cert-info myapp            {Colors.YELLOW}# Sertifika bilgilerini görüntüle{Colors.ENDC}
   alp remove myapp
   alp upgrade
   alp search web
@@ -945,6 +1155,8 @@ def main():
             mgr.compile_package(sys.argv[2])
         elif cmd == "install-local" and len(sys.argv) > 2:
             mgr.install_local_package(sys.argv[2])
+        elif cmd == "cert-info" and len(sys.argv) > 2:
+            mgr.cert_manager.show_certificate_info(sys.argv[2])
         elif cmd == "stats":
             mgr.stats()
         elif cmd == "clean":
