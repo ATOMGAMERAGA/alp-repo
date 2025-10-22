@@ -1094,31 +1094,31 @@ def main():
   {Colors.CYAN}remove <paket>{Colors.ENDC}          Paket kaldır
   {Colors.CYAN}upgrade [paket]{Colors.ENDC}         Paket güncelle (tümü veya belirli)
   
-{Colors.BOLD}Paket İşlemleri:{Colors.ENDC}
+{Colors.BOLD}Paket İşlemleri:
   {Colors.CYAN}list{Colors.ENDC}                    Tüm paketleri listele
   {Colors.CYAN}list <kategori>{Colors.ENDC}        Kategoriye göre listele
   {Colors.CYAN}installed{Colors.ENDC}              Yüklü paketleri listele
   {Colors.CYAN}search <anahtar>{Colors.ENDC}       Paket ara
   {Colors.CYAN}info <paket>{Colors.ENDC}           Paket detaylarını göster
   
-{Colors.BOLD}Geliştirici Araçları:{Colors.ENDC}
+{Colors.BOLD}Geliştirici Araçları:
   {Colors.CYAN}compile <dizin>{Colors.ENDC}        Paket dizinini .alp dosyasına derle
   {Colors.CYAN}install-local <dosya>{Colors.ENDC}  Yerel .alp dosyasını kur
   
-{Colors.BOLD}Sertifika Sistemi:{Colors.ENDC}
+{Colors.BOLD}Sertifika Sistemi:
   {Colors.CYAN}cert-info <paket>{Colors.ENDC}      Paket sertifikasını göster
   {Colors.GREEN}🏆 Official{Colors.ENDC}             Resmi Alp sertifikalı paketler
   {Colors.CYAN}🔒 Custom{Colors.ENDC}               Geliştirici tarafından imzalı paketler
   {Colors.YELLOW}⚠️  Unsigned{Colors.ENDC}            Sertifikasız paketler (Uyarı verir)
   
-{Colors.BOLD}Sistem:{Colors.ENDC}
+{Colors.BOLD}Sistem:
   {Colors.CYAN}stats{Colors.ENDC}                  İstatistikleri göster
   {Colors.CYAN}clean{Colors.ENDC}                  Cache'i temizle
   {Colors.CYAN}self-update{Colors.ENDC}            Alp'i güncelle
   {Colors.CYAN}config{Colors.ENDC}                 Ayarları göster
   {Colors.CYAN}help{Colors.ENDC}                   Bu yardımı göster
 
-{Colors.BOLD}Örnekler:{Colors.ENDC}
+{Colors.BOLD}Örnekler:
   alp update
   alp install myapp
   alp compile ./myapp-project    {Colors.YELLOW}# Sertifikalama seçeneği ile{Colors.ENDC}
@@ -1166,7 +1166,7 @@ def main():
         elif cmd == "config":
             print(json.dumps(mgr.config.config, indent=2))
         elif cmd == "help":
-            main()
+            print_help()
         else:
             logger.log("ERROR", f"Bilinmeyen komut: {cmd}")
     except KeyboardInterrupt:
