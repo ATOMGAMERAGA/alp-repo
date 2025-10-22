@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  alp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alp-manager:latest
+    container_name: alp-package-manager
+    
+    # Volume mount - persistant data
+    volumes:
+      - alp-data:/root/.alp
+      - alp-packages:/root/.alp/installed
+      - alp-cache:/root/.alp/cache
+      - alp-logs:/root/.alp/logs
+    
+    # Environment variables
+    environment:
+      - TZ=Europe/Istanbul
+      - PYTHONUNBUFFERED=1
+      - ALP_AUTO_UPDATE=true
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # stdin açık tut (interaktif mod için)
+    stdin_open: true
+    tty: true
+    
+    # Network
+    networks:
+      - alp-network
+
+# Volumes tanımları (kalıcı veri)
+volumes:
+  alp-data:
+    driver: local
+  alp-packages:
+    driver: local
+  alp-cache:
+    driver: local
+  alp-logs:
+    driver: local
+
+# Network tanımı
+networks:
+  alp-network:
+    driver: bridge
