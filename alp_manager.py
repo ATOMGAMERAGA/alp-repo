@@ -56,7 +56,7 @@ class Logger:
     def log(self, level: str, message: str):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
-        with open(self.log_file, 'a') as f:
+        with open(self.log_file, 'a', encoding='utf-8') as f:
             f.write(log_entry + "\n")
         if level == "ERROR":
             print(f"{Colors.RED}❌ {message}{Colors.ENDC}")
@@ -1083,11 +1083,12 @@ def print_banner():
 {Colors.GREEN}🔒 Certificate System Enabled{Colors.ENDC}
 """)
 
-def main():
-    if len(sys.argv) < 2:
-        print_banner()
-        print(f"""{Colors.BOLD}Kullanım: alp <komut> [argümanlar]{Colors.ENDC}
+# Yardım metnini merkezi hâle getir
 
+def print_help():
+    print_banner()
+    print(f"""{Colors.BOLD}Kullanım: alp <komut> [argümanlar]{Colors.ENDC}
+ 
 {Colors.BOLD}Paket Yönetimi:{Colors.ENDC}
   {Colors.CYAN}update{Colors.ENDC}                  Depoyu güncelle
   {Colors.CYAN}install <paket>{Colors.ENDC}         Paket yükle
@@ -1117,7 +1118,7 @@ def main():
   {Colors.CYAN}self-update{Colors.ENDC}            Alp'i güncelle
   {Colors.CYAN}config{Colors.ENDC}                 Ayarları göster
   {Colors.CYAN}help{Colors.ENDC}                   Bu yardımı göster
-
+ 
 {Colors.BOLD}Örnekler:
   alp update
   alp install myapp
@@ -1128,6 +1129,12 @@ def main():
   alp upgrade
   alp search web
         """)
+ 
+
+def main():
+    # Argüman yoksa yardım göster ve çık
+    if len(sys.argv) < 2:
+        print_help()
         return
     
     mgr = PackageManager()
@@ -1178,3 +1185,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
