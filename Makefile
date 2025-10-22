@@ -108,4 +108,57 @@ backup: ## Volume'leri yedekle
 restore: ## En son yedeği geri yükle
 	@echo "📥 Restoring from latest backup..."
 	@LATEST=$$(ls -t backups/alp-backup-*.tar.gz 2>/dev/null | head -1); \
-	if [ -z "$$LATEST" ];
+	if [ -z "$$LATEST" ]; then \
+		echo "❌ No backup found!"; \
+		exit 1; \
+	fi; \
+	echo "📦 Restoring from $$LATEST..."; \
+	docker run --rm \
+		-v alp-data:/data \
+		-v $(PWD)/backups:/backup \
+		alpine tar xzf /backup/$$(basename $$LATEST) -C /data
+	@echo "✅ Restore completed!"
+
+install-local: ## Yerel .alp dosyasını kur (USE: make install-local FILE=myapp.alp)
+	@if [ -z "$(FILE)" ]; then \
+		echo "❌ Usage: make install-local FILE=myapp.alp"; \
+		exit 1; \
+	fi
+	@echo "📦 Installing $(FILE)..."
+	docker run --rm \
+		-v $(PWD):/workspace \
+		-v alp-data:/root/.alp \
+		-w /workspace \
+		$(IMAGE_NAME):$(IMAGE_TAG) alp install-local $(FILE)
+
+compile: ## Paketi derle (USE: make compile DIR=./myapp)
+	@if [ -z "$(DIR)" ]; then \
+		echo "❌ Usage: make compile DIR=./myapp"; \
+		exit 1; \
+	fi
+	@echo "🔨 Compiling package from $(DIR)..."
+	docker run --rm -it \
+		-v $(PWD)/$(DIR):/workspace \
+		-v $(PWD):/output \
+		-v alp-data:/root/.alp \
+		-w /workspace \
+		$(IMAGE_NAME):$(IMAGE_TAG) alp compile .
+
+health: ## Health check
+	@echo "🏥 Checking container health..."
+	@docker inspect --format='{{.State.Health.Status}}' $(CONTAINER_NAME) 2>/dev/null || echo "Container not running"
+
+stats: ## Container istatistikleri
+	@echo "📊 Container stats..."
+	docker stats $(CONTAINER_NAME) --no-stream
+
+inspect: ## Container detaylarını göster
+	@echo "🔍 Inspecting container..."
+	docker inspect $(CONTAINER_NAME) | jq '.[0] | {State, Config: .Config.Env, Mounts}'
+
+prune: ## Kullanılmayan Docker kaynaklarını temizle
+	@echo "🧹 Pruning Docker resources..."
+	docker system prune -f
+	docker volume prune -f
+
+all: build start ## Build et ve başlat
