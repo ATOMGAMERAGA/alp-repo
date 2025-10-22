@@ -1,4 +1,4 @@
-# 🚀 Alp Package Manager
+# 🚀 ALP Package Manager
 
 **Alp**, GitHub deposundan paketleri yönetmek için tasarlanmış, **gelişmiş**, **hafif** ve **güvenilir** bir Linux paket yöneticisidir. `apt`, `dnf`, `pacman` gibi sistem paket yöneticilerine benzer şekilde çalışır, ancak doğrudan GitHub depolarından paket yönetimi sağlar.
 
