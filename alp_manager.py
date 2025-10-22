@@ -221,13 +221,20 @@ class PackageManager:
         self.load_databases()
     
     def setup_home(self):
-        """Alp dizin yapısını oluştur"""
+    """Alp dizin yapısını oluştur"""
+    try:
         ALP_HOME.mkdir(parents=True, exist_ok=True)
         ALP_CACHE.mkdir(parents=True, exist_ok=True)
         ALP_LOGS.mkdir(parents=True, exist_ok=True)
         INSTALLED_DIR.mkdir(parents=True, exist_ok=True)
-        logger.log("INFO", "Dizin yapısı oluşturuldu")
-    
+        # Log sadece ilk oluşturmada
+        if not (PACKAGES_DB.exists() and INSTALLED_DB.exists()):
+            logger.log("INFO", "Dizin yapısı oluşturuldu")
+    except Exception as e:
+        logger.log("ERROR", f"Dizin oluşturma hatası: {e}")
+        # Hata olsa bile devam et
+        pass
+        
     def fetch_url(self, url: str, timeout: int = 30) -> Optional[str]:
         """URL'den içerik indir"""
         try:
