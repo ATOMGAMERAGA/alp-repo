@@ -1135,6 +1135,130 @@ class PackageManager:
         print(f"  {Colors.BOLD}Son Güncelleme:{Colors.ENDC} {datetime.fromtimestamp(PACKAGES_DB.stat().st_mtime) if PACKAGES_DB.exists() else 'Hiç'}")
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}\n")
     
+    def doctor(self) -> None:
+        """Sistem sağlığını kontrol et: bozuk kurulumlar, eksik bağımlılıklar, cache sorunları"""
+        print(f"\n{Colors.BOLD}{Colors.CYAN}🏥 Alp Doktor:{Colors.ENDC}")
+        print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}")
+        issues_dirs = []
+        issues_db = []
+        issues_installs = []
+        issues_deps = []
+        issues_cache = []
+
+        # Dizin kontrolleri
+        for path, name in [(ALP_HOME, 'ALP_HOME'), (ALP_CACHE, 'ALP_CACHE'), (ALP_LOGS, 'ALP_LOGS'), (INSTALLED_DIR, 'INSTALLED_DIR')]:
+            if not path.exists():
+                issues_dirs.append(f"Eksik dizin: {name} ({path})")
+            elif not path.is_dir():
+                issues_dirs.append(f"Dizin değil: {name} ({path})")
+
+        # Veritabanı kontrolleri
+        if not PACKAGES_DB.exists():
+            issues_db.append("Paket veritabanı yok. 'alp update' çalıştırın.")
+        else:
+            try:
+                with open(PACKAGES_DB, 'r') as f:
+                    json.load(f)
+            except Exception as e:
+                issues_db.append(f"packages.json okunamadı: {e}")
+
+        if not INSTALLED_DB.exists():
+            issues_db.append("Yüklü paket veritabanı yok (hiç kurulum yapılmamış olabilir).")
+        else:
+            try:
+                with open(INSTALLED_DB, 'r') as f:
+                    json.load(f)
+            except Exception as e:
+                issues_db.append(f"installed.json okunamadı: {e}")
+
+        # Kurulum tutarlılık kontrolleri
+        installed_dirs = [d for d in INSTALLED_DIR.glob('*') if d.is_dir()]
+        for d in installed_dirs:
+            name = d.name
+            if name not in self.installed:
+                issues_installs.append(f"Kayıtsız kurulum klasörü bulundu: {name}")
+            inst_file = d / 'installed.json'
+            if not inst_file.exists():
+                issues_installs.append(f"Eksik installed.json: {name}")
+            else:
+                try:
+                    with open(inst_file, 'r') as f:
+                        data = json.load(f)
+                    if data.get('name') and data.get('name') != name:
+                        issues_installs.append(f"Ad uyuşmazlığı: klasör={name}, json={data.get('name')}")
+                except Exception as e:
+                    issues_installs.append(f"installed.json bozuk: {name} ({e})")
+
+        for name in list(self.installed.keys()):
+            if not (INSTALLED_DIR / name).exists():
+                issues_installs.append(f"Kayıt var ama klasör yok: {name}")
+
+        # Bağımlılık kontrolleri (yalnızca yüklü paketler için)
+        for name in list(self.installed.keys()):
+            deps = self.packages.get(name, {}).get('dependencies', [])
+            for dep in deps:
+                if dep not in self.installed:
+                    issues_deps.append(f"{name} eksik bağımlılık: {dep}")
+
+        # Cache kontrolleri
+        total_cache_size = 0
+        zero_files = []
+        stale_scripts = 0
+        if ALP_CACHE.exists():
+            for f in ALP_CACHE.rglob('*'):
+                if f.is_file():
+                    size = f.stat().st_size
+                    total_cache_size += size
+                    if size == 0:
+                        zero_files.append(str(f))
+            for f in ALP_CACHE.glob('*_install.sh'):
+                pkgname = f.name.replace('_install.sh', '')
+                if pkgname not in self.packages and pkgname not in self.installed:
+                    stale_scripts += 1
+        cache_limit_mb = self.config.get('cache_size', 1000)
+        cache_size_mb = total_cache_size / 1024 / 1024
+        if cache_size_mb > cache_limit_mb:
+            issues_cache.append(f"Cache boyutu limit aşıldı: {cache_size_mb:.2f}MB > {cache_limit_mb}MB")
+        if zero_files:
+            issues_cache.append(f"Cache içinde sıfır bayt dosyalar: {len(zero_files)} adet")
+        if stale_scripts:
+            issues_cache.append(f"Artık kurulum scriptleri: {stale_scripts} adet")
+
+        # Çıktı
+        def section(title, items):
+            print(f"  {Colors.BOLD}{title}:{Colors.ENDC}")
+            if not items:
+                print(f"    {Colors.GREEN}✓ Temiz{Colors.ENDC}")
+            else:
+                for it in items[:10]:
+                    print(f"    {Colors.YELLOW}•{Colors.ENDC} {it}")
+                extra = len(items) - min(len(items), 10)
+                if extra > 0:
+                    print(f"    (+{extra} daha)")
+            print("")
+
+        section("Dizinler", issues_dirs)
+        section("Veritabanları", issues_db)
+        section("Kurulumlar", issues_installs)
+        section("Bağımlılıklar", issues_deps)
+        section("Cache", issues_cache)
+
+        # Öneriler
+        suggestions = []
+        if issues_db or not PACKAGES_DB.exists():
+            suggestions.append("alp update")
+        if issues_cache:
+            suggestions.append("alp clean")
+        if issues_deps:
+            missing_set = sorted({x.split(':')[-1].strip() for x in issues_deps})
+            if missing_set:
+                suggestions.append(f"alp install {' '.join(missing_set[:3])}")
+        if suggestions:
+            print(f"  {Colors.BOLD}Öneriler:{Colors.ENDC}")
+            for s in suggestions:
+                print(f"    {Colors.CYAN}→ {s}{Colors.ENDC}")
+        print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}\n")
+    
     def self_update(self) -> None:
         """Alp'in kendisini güncelle"""
         print(f"{Colors.BOLD}{Colors.CYAN}🔄 Alp Self-Update Başlıyor...{Colors.ENDC}\n")
@@ -1251,6 +1375,7 @@ def print_help():
   
 {Colors.BOLD}Sistem:
   {Colors.CYAN}stats{Colors.ENDC}                  İstatistikleri göster
+  {Colors.CYAN}doctor{Colors.ENDC}                 Sağlık taraması (kurulum, bağımlılık, cache)
   {Colors.CYAN}clean{Colors.ENDC}                  Cache'i temizle
   {Colors.CYAN}self-update{Colors.ENDC}            Alp'i güncelle
   {Colors.CYAN}config{Colors.ENDC}                 Ayarları göster
@@ -1322,6 +1447,8 @@ def main():
                 print(f"{Colors.YELLOW}ℹ️  Kullanım: alp cert-scan <github_url>{Colors.ENDC}")
         elif cmd == "stats":
             mgr.stats()
+        elif cmd == "doctor":
+            mgr.doctor()
         elif cmd == "clean":
             mgr.clean_cache()
         elif cmd == "self-update":

@@ -248,6 +248,40 @@ alp stats
 
 ---
 
+#### `alp doctor`
+Sistemi tarar: bozuk kurulumlar, eksik bağımlılıklar ve cache sorunları.
+
+```bash
+alp doctor
+```
+
+Örnek kontroller:
+- 🔧 Dizinler ve dosyalar: `~/.alp`, `packages.json`, `installed.json`
+- 📦 Kurulum bütünlüğü: paket dosyaları, `installed.json` kaydı
+- 🔗 Bağımlılıklar: eksik bağımlılıklar ve çözüm önerileri
+- 💾 Cache: bozuk veya yarım dosyalar, aşırı boyut
+
+Örnek çıktı:
+```
+🩺 Sistem Sağlık Taraması
+────────────────────────────────────────────────────────────────────────────────
+✅ Dizin durumu: OK
+⚠️ installed.json uyumsuz kayıtlar: 1
+   └─ Kayıp paket dizini: myapp
+⚠️ Bağımlılık sorunları: 2
+   ├─ ggs: eksik -> [python3]
+   └─ webtools: eksik -> [curl, git]
+⚠️ Cache sorunları: 1
+   └─ Yarım indirme: cache/webtools-2.0.0/install.sh.partial
+────────────────────────────────────────────────────────────────────────────────
+Öneriler:
+- Run: alp clean
+- Reinstall missing packages: alp install myapp
+- Resolve deps: alp install python3 curl git
+```
+
+---
+
 #### `alp clean`
 İndirilen dosyaların cache'ini temizle. Disk alanı tasarrufu sağlar.
 
