@@ -591,4 +591,21 @@ Sorun veya öneriniz varsa:
 
 ---
 
+### 🔒 Sertifika Sistemi (cerf.alpc)
+
+ALP, GitHub’da barındırılan projeler için depo kökünde `cerf.alpc` dosyası ile sertifika taraması yapar.
+
+Komutlar:
+- `alp cert-create <type> <author> <pkg>`: Mevcut dizinde `cerf.alpc` oluşturur. `type` değerleri: `official`, `dev`, `normal`.
+- `alp cert-scan <github_url>`: GitHub deposunda `cerf.alpc` arar ve doğrulama sonucunu gösterir.
+
+Türler:
+- 🏆 `official`: Resmi ALP sertifikası (şifre gerekir)
+- 🔧 `dev`: Geliştirici sertifikası
+- 👤 `normal`: Normal sertifika
+
+Depo güncellemede (`alp update`), bulunan `cerf.alpc` bilgisi paket listesi ve `alp info` çıktısında rozet olarak gösterilir.
+
+---
+
 **Alp Package Manager** - GitHub'dan Paket Yönetimi İçin Gelişmiş Bir Çözüm 🚀

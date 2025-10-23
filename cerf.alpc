@@ -1,0 +1,10 @@
+{
+  "format": "alpc-1.0",
+  "magic": "ALP-CERF",
+  "package": "alp-repo",
+  "author": "ATOMGAMERAGA",
+  "type": "normal",
+  "issued_at": "2025-10-22T20:51:38.400221",
+  "token": "10a167eb7df9ef522a277a18495320f9",
+  "signature": "a64925267529dbbbc2e9df098727f84643a3861ed5eae316265558b047d41581"
+}

@@ -175,6 +175,56 @@ class CertificateManager:
         print(f"\n{Colors.GREEN}  ✓ Sertifika doğrulandı: {message}{Colors.ENDC}")
         print(f"{Colors.BOLD}{'-' * 60}{Colors.ENDC}\n")
 
+    def generate_alpc_file(self, package_name: str, author: str, cert_type: str) -> Dict:
+        """cerf.alpc içeriğini üret (official/dev/normal)"""
+        ts = datetime.now().isoformat()
+        token = secrets.token_hex(16)
+        cert_type = cert_type.lower()
+        if cert_type not in ["official", "dev", "normal"]:
+            cert_type = "normal"
+        data = {
+            "format": "alpc-1.0",
+            "magic": "ALP-CERF",
+            "package": package_name,
+            "author": author,
+            "type": cert_type,
+            "issued_at": ts,
+            "token": token,
+        }
+        data["signature"] = self._generate_alpc_signature(
+            data["package"], data["author"], data["type"], data["issued_at"], data["token"]
+        )
+        return data
+
+    def _generate_alpc_signature(self, package_name: str, author: str, cert_type: str, issued_at: str, token: str) -> str:
+        """cerf.alpc imzası"""
+        raw = f"{package_name}|{author}|{cert_type}|{issued_at}|{token}|ALP-CERF"
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    def verify_alpc(self, alpc: Dict) -> Tuple[bool, str]:
+        """cerf.alpc doğrulaması"""
+        required = ["format", "magic", "package", "author", "type", "issued_at", "token", "signature"]
+        if not all(k in alpc for k in required):
+            return False, "Eksik alanlar"
+        if alpc.get("magic") != "ALP-CERF":
+            return False, "Geçersiz magic"
+        sig = self._generate_alpc_signature(
+            alpc.get("package", ""),
+            alpc.get("author", ""),
+            alpc.get("type", ""),
+            alpc.get("issued_at", ""),
+            alpc.get("token", "")
+        )
+        if sig != alpc.get("signature"):
+            return False, "İmza uyuşmuyor"
+        t = alpc.get("type")
+        if t == "official":
+            return True, "Official Alp Sertifikası"
+        elif t == "dev":
+            return True, "Geliştirici Sertifikası"
+        else:
+            return True, "Normal Sertifika"
+
 class Config:
     """Yapılandırma yönetimi"""
     DEFAULT_CONFIG = {
@@ -305,6 +355,29 @@ class PackageManager:
                     metadata[key] = value
         
         return metadata
+
+    def parse_cert_alpc(self, github_url: str) -> Optional[Dict]:
+        """GitHub repo kökünden cerf.alpc dosyasını indir ve doğrula"""
+        base = github_url.rstrip('/')
+        if '/tree/main' in base:
+            base = base.replace('/tree/main', '')
+        raw_main = base.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/main/cerf.alpc'
+        raw_master = base.replace('github.com', 'raw.githubusercontent.com') + '/refs/heads/master/cerf.alpc'
+        content = self.fetch_url(raw_main) or self.fetch_url(raw_master)
+        if not content:
+            return None
+        try:
+            alpc = json.loads(content)
+        except Exception:
+            logger.log("WARNING", f"cerf.alpc geçersiz JSON: {github_url}")
+            return None
+        is_valid, msg = self.cert_manager.verify_alpc(alpc)
+        return {
+            'cert_type': alpc.get('type'),
+            'cert_author': alpc.get('author'),
+            'cert_valid': is_valid,
+            'cert_message': msg
+        }
     
     def compile_package(self, directory: str, add_certificate: bool = True) -> bool:
         """Paket dizinini .alp dosyasına derle ve sertifikala"""
@@ -454,6 +527,46 @@ class PackageManager:
             logger.log("ERROR", f"Paket derlenemedi: {e}")
             return False
     
+    def create_alpc(self, package_name: str, author: str, cert_type: str) -> bool:
+        """Mevcut dizinde cerf.alpc oluştur"""
+        cert_type = cert_type.lower()
+        if cert_type == 'official':
+            pwd = input("Official sertifika şifresi: ").strip()
+            if hashlib.sha256(pwd.encode()).hexdigest() != OFFICIAL_CERT_KEY:
+                print(f"{Colors.RED}✗ Hatalı şifre!{Colors.ENDC}")
+                return False
+            author = "Alp Official"
+        data = self.cert_manager.generate_alpc_file(package_name, author, cert_type)
+        out = Path.cwd() / 'cerf.alpc'
+        try:
+            with open(out, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            logger.log("SUCCESS", f"cerf.alpc oluşturuldu: {out}")
+            icon = "🏆" if data.get('type') == 'official' else ("🔧" if data.get('type') == 'dev' else "👤")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} Tür: {data.get('type')} {icon}")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} Yazar: {data.get('author')}")
+            print(f"{Colors.GREEN}✓{Colors.ENDC} İmza: {data.get('signature')[:16]}...")
+            return True
+        except Exception as e:
+            logger.log("ERROR", f"cerf.alpc yazılamadı: {e}")
+            return False
+
+    def scan_alpc_repo(self, github_url: str) -> bool:
+        """GitHub repo için cerf.alpc taraması ve çıktı"""
+        info = self.parse_cert_alpc(github_url)
+        if not info:
+            print(f"{Colors.YELLOW}⚠️  cerf.alpc bulunamadı ya da erişilemedi{Colors.ENDC}")
+            return False
+        icon = "🏆" if info.get('cert_type') == 'official' else ("🔧" if info.get('cert_type') == 'dev' else "👤")
+        status = f"{Colors.GREEN}✓ Geçerli{Colors.ENDC}" if info.get('cert_valid') else f"{Colors.RED}✗ Geçersiz{Colors.ENDC}"
+        print(f"\n{Colors.BOLD}{Colors.CYAN}🔎 Sertifika Taraması{Colors.ENDC}")
+        print(f"{Colors.BOLD}{'-' * 60}{Colors.ENDC}")
+        print(f"  Tür: {info.get('cert_type')} {icon}")
+        print(f"  Yazar: {info.get('cert_author')}")
+        print(f"  Durum: {status} - {info.get('cert_message')}")
+        print(f"{Colors.BOLD}{'-' * 60}{Colors.ENDC}\n")
+        return info.get('cert_valid', False)
+
     def install_local_package(self, alp_file: str) -> bool:
         """Yerel .alp dosyasını kur"""
         alp_path = Path(alp_file)
@@ -656,6 +769,10 @@ class PackageManager:
                 if metadata and 'name' in metadata:
                     metadata['url'] = line
                     metadata['added_date'] = datetime.now().isoformat()
+                    # cerf.alpc tara
+                    cert_info = self.parse_cert_alpc(line)
+                    if cert_info:
+                        metadata.update(cert_info)
                     self.packages[metadata['name']] = metadata
                     valid_count += 1
         
@@ -874,8 +991,17 @@ class PackageManager:
             des = pkg.get('description', 'Açıklama yok')[:50]
             cat = pkg.get('category', 'misc')
             status = "✅" if (INSTALLED_DIR / name).exists() else "⭕"
+            # Sertifika rozetleri
+            cert_icon = ""
+            if pkg.get('cert_type') and pkg.get('cert_valid'):
+                if pkg['cert_type'] == 'official':
+                    cert_icon = f" {Colors.GREEN}🏆{Colors.ENDC}"
+                elif pkg['cert_type'] == 'dev':
+                    cert_icon = f" {Colors.CYAN}🔧{Colors.ENDC}"
+                elif pkg['cert_type'] == 'normal':
+                    cert_icon = f" {Colors.CYAN}👤{Colors.ENDC}"
             
-            print(f"{status} {Colors.BOLD}{name}{Colors.ENDC:24} ({ver:8}) {Colors.CYAN}[{cat}]{Colors.ENDC}")
+            print(f"{status} {Colors.BOLD}{name}{Colors.ENDC:24} ({ver:8}) {Colors.CYAN}[{cat}]{Colors.ENDC}{cert_icon}")
             print(f"   └─ {des}...")
         
         print(f"{Colors.BOLD}{'-' * 80}{Colors.ENDC}")
@@ -960,7 +1086,15 @@ class PackageManager:
                 status = f"{Colors.GREEN}✓{Colors.ENDC}" if dep in self.installed else f"{Colors.RED}✗{Colors.ENDC}"
                 print(f"    {status} {dep}")
         
-        # Sertifika bilgisi
+        # Repo sertifikası (cerf.alpc)
+        if pkg.get('cert_type'):
+            icon = "🏆" if pkg.get('cert_type') == 'official' else ("🔧" if pkg.get('cert_type') == 'dev' else "👤")
+            validity = f"{Colors.GREEN}Geçerli{Colors.ENDC}" if pkg.get('cert_valid') else f"{Colors.RED}Geçersiz{Colors.ENDC}"
+            print(f"  {Colors.BOLD}Repo Sertifikası:{Colors.ENDC} {pkg.get('cert_type')} {icon} - {validity}")
+            if pkg.get('cert_author'):
+                print(f"  {Colors.BOLD}Sertifika Sahibi:{Colors.ENDC} {pkg.get('cert_author')}")
+        
+        # Yüklü paket sertifikası
         if is_installed:
             cert = self.cert_manager.get_certificate(package_name)
             if cert:
@@ -1108,8 +1242,11 @@ def print_help():
   
 {Colors.BOLD}Sertifika Sistemi:
   {Colors.CYAN}cert-info <paket>{Colors.ENDC}      Paket sertifikasını göster
+  {Colors.CYAN}cert-create <type> <author> <pkg>{Colors.ENDC}  cerf.alpc oluştur (official/dev/normal)
+  {Colors.CYAN}cert-scan <github_url>{Colors.ENDC}  GitHub reposunda cerf.alpc taraması yap
   {Colors.GREEN}🏆 Official{Colors.ENDC}             Resmi Alp sertifikalı paketler
-  {Colors.CYAN}🔒 Custom{Colors.ENDC}               Geliştirici tarafından imzalı paketler
+  {Colors.CYAN}🔧 Dev{Colors.ENDC}                  Geliştirici sertifikalı paketler
+  {Colors.CYAN}👤 Normal{Colors.ENDC}               Normal sertifikalı paketler
   {Colors.YELLOW}⚠️  Unsigned{Colors.ENDC}            Sertifikasız paketler (Uyarı verir)
   
 {Colors.BOLD}Sistem:
@@ -1164,6 +1301,25 @@ def main():
             mgr.install_local_package(sys.argv[2])
         elif cmd == "cert-info" and len(sys.argv) > 2:
             mgr.cert_manager.show_certificate_info(sys.argv[2])
+        elif cmd == "cert-create":
+            # alp cert-create <type> <author> <package>
+            if len(sys.argv) > 4:
+                mgr.create_alpc(sys.argv[4], sys.argv[3], sys.argv[2])
+            else:
+                print(f"{Colors.YELLOW}ℹ️  Kullanım: alp cert-create <type> <author> <package>{Colors.ENDC}")
+                print(f"{Colors.CYAN}Etkileşimli mod başlatılıyor...{Colors.ENDC}")
+                ctype = input("Sertifika türü (official/dev/normal): ").strip().lower() or "normal"
+                author = input("Yazar/İmzalayan: ").strip() or "Unknown"
+                pkg = input("Paket adı: ").strip()
+                if pkg:
+                    mgr.create_alpc(pkg, author, ctype)
+                else:
+                    logger.log("ERROR", "Paket adı zorunludur")
+        elif cmd == "cert-scan":
+            if len(sys.argv) > 2:
+                mgr.scan_alpc_repo(sys.argv[2])
+            else:
+                print(f"{Colors.YELLOW}ℹ️  Kullanım: alp cert-scan <github_url>{Colors.ENDC}")
         elif cmd == "stats":
             mgr.stats()
         elif cmd == "clean":
