@@ -1,267 +1,206 @@
-# 🚀 ALP Package Manager
+# Alp Package Manager
 
-**Alp**, GitHub deposundan paketleri yönetmek için tasarlanmış, **gelişmiş**, **hafif** ve **güvenilir** bir Linux paket yöneticisidir. `apt`, `dnf`, `pacman` gibi sistem paket yöneticilerine benzer şekilde çalışır, ancak doğrudan GitHub depolarından paket yönetimi sağlar.
+Alp, projeleri kolayca paketleyip yüklemenizi, bağımlılıkları yönetmenizi ve sisteminizi sağlıklı tutmanızı sağlayan hafif bir paket yöneticisidir. Sertifika sistemi (cerf.alpc) ile güven ve şeffaflık sunar.
 
-## ✨ Özellikler
-
-- 📦 **GitHub İntegrasyonu** - Projelerinizi doğrudan GitHub'dan yönetin
-- 🔗 **Bağımlılık Yönetimi** - Otomatik bağımlılık çözümü ve kurulumu
-- 🔄 **Otomatik Güncellemeler** - Systemd timer ile 24 saatte bir güncelleme kontrolü
-- 🛡️ **Güvenli Kurulum** - Syntax kontrol, backup ve geri dönüş desteği
-- 📊 **Loglama Sistemi** - Tüm işlemler `~/.alp/logs/` dizininde kaydedilir
-- ⚡ **Self-Update** - Alp'in kendisini güncelleme özelliği
-- 🎯 **Kategorilendirme** - Paketleri kategorilere göre filtreleme
-- 💾 **Cache Yönetimi** - Hızlı indirme ve disk alanı yönetimi
-- 🔍 **Arama Fonksiyonu** - Paket adı ve açıklamasına göre arama
-- 📈 **İstatistikler** - Sistem ve paket istatistikleri
+## Özellikler
+- Hızlı paket güncelleme ve kurulum (`alp update`, `alp install`)
+- Bağımlılık kontrolü ve çözümleme
+- Projeleri `.alp` dosyasına derleme (`alp compile`)
+- Yerel `.alp` paketlerini kurma (`alp install-local`)
+- Sertifika sistemi: `cert-info`, `cert-create`, `cert-scan`
+- Sistem sağlık taraması (`alp doctor`) ve istatistikler (`alp stats`)
+- Cache temizleme ve kendi kendini güncelleme (`alp clean`, `alp self-update`)
 
 ---
 
-## 📥 Kurulum
+## Kurulum
 
-### Linux (Ubuntu/Debian)
-
+### Linux (Tek Komut)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/install.sh | sudo bash
+sudo curl -fsSL https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/main/install.sh | bash
+```
+- Kurulum, `~/.alp` dizinini hazırlar ve gerekli dosyaları indirir.
+- Komut sonrası `alp` komutunu terminalde kullanabilirsiniz.
+
+### Windows (Python ile)
+1. Python 3 yüklü olduğundan emin olun.
+2. Depoyu indirin veya klonlayın:
+   ```powershell
+   git clone https://github.com/ATOMGAMERAGA/alp-repo.git
+   cd alp-repo
+   ```
+3. Komutları çalıştırın:
+   ```powershell
+   python alp_manager.py help
+   python alp_manager.py update
+   ```
+4. İsteğe bağlı alias (PowerShell):
+   ```powershell
+   Set-Alias alp "python C:\Genel\Code\alp-repo\alp_manager.py"
+   # Sonra: alp help
+   ```
+
+### Docker (Container)
+Docker ile hızlı kurulum ve izole çalışma ortamı.
+
+- Docker Hub: https://hub.docker.com/r/atomgameraga/alp-manager
+
+Çek ve çalıştır:
+```bash
+docker pull atomgameraga/alp-manager:latest
+docker run --rm -it atomgameraga/alp-manager alp help
 ```
 
-**Veya adım adım:**
-
+Veri kalıcılığı (named volume):
 ```bash
-# Script'i indir
-curl -O https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/install.sh
-
-# Kurulumu çalıştır
-sudo bash install.sh
-
-# Script'i sil (opsiyonel)
-rm install.sh
+docker run --rm \
+  -v alp-data:/root/.alp \
+  atomgameraga/alp-manager alp update
 ```
 
-### Linux (Fedora/RHEL)
-
+İnteraktif shell:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/install.sh | sudo bash
-```
-
-Bağımlılıklar otomatik olarak kurulacaktır.
-
-### Linux (Arch Linux)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/install.sh | sudo bash
-```
-
-### Sorun Giderme
-
-Eğer curl çalışmazsa wget kullanın:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/ATOMGAMERAGA/alp-repo/refs/heads/main/install.sh | sudo bash
-```
-
----
-
-## 🎯 Hızlı Başlangıç
-
-```bash
-# Depoyu güncelle
+docker run -it --rm \
+  -v alp-data:/root/.alp \
+  atomgameraga/alp-manager bash
+# Container içinde:
 alp update
-
-# Tüm paketleri listele
 alp list
+alp install myapp
+```
 
-# Belirli bir paketi arama
-alp search web
+Detaylı kullanım ve Compose: `DOCKER.md`
 
-# Paket yükle
-alp install myproject
+### Güncelleme
+```bash
+alp self-update
+```
+- Son sürümü indirir, syntax kontrolü yapar ve güvenli şekilde günceller.
 
-# Paket kaldır
-alp remove myproject
+---
 
-# Yüklü paketleri göster
-alp installed
-
-# Paket detaylarını göster
-alp info myproject
-
-# Tüm paketleri güncelle
-alp upgrade
-
-# Belirli paketi güncelle
-alp upgrade myproject
+## Hızlı Başlangıç
+```bash
+alp update              # Depoyu güncelle
+alp search web          # Arama yap
+alp install myapp       # Paket kur
+alp installed           # Yüklü paketleri gör
+alp info myapp          # Paket detayları
+alp doctor              # Sistem sağlık taraması
+alp clean               # Cache temizleme
 ```
 
 ---
 
-## 📚 Komutlar
+## Komutlar
 
 ### Paket Yönetimi
+- `alp update` — Depoyu güncelle
+- `alp install <paket>` — Paket yükle
+- `alp remove <paket>` — Paket kaldır
+- `alp upgrade [paket]` — Tüm veya tek paket güncelle
 
-#### `alp update`
-Depoyu güncelle ve yeni paketleri bul. İlk kullanımda mutlaka çalıştırılmalıdır.
+### Listeleme ve Bilgi
+- `alp list [kategori]` — Tüm/kategoriye göre listele
+- `alp installed` — Yüklü paketleri göster
+- `alp search <anahtar>` — Paket ara
+- `alp info <paket>` — Paket detaylarını göster
 
+### Geliştirici Araçları
+- `alp compile <dizin>` — Proje dizinini `.alp` dosyasına derle
+- `alp install-local <dosya>` — Yerel `.alp` paketini kur
+
+### Sertifika Sistemi (cerf.alpc)
+- `alp cert-info <paket>` — Paket sertifikasını göster
+- `alp cert-create <type> <author> <pkg>` — Sertifika dosyası oluştur
+  - Etkileşimli mod: `alp cert-create` (türü, yazar ve paket adı sorulur)
+  - Tipler: `official`, `dev`, `normal`
+- `alp cert-scan <github_url>` — GitHub reposunda `cerf.alpc` taraması yap
+
+### Sistem
+- `alp stats` — İstatistikleri göster
+- `alp doctor` — Sağlık taraması (kurulum, bağımlılık, cache)
+- `alp clean` — Cache’i temizle
+- `alp self-update` — Alp’i güncelle
+- `alp config` — Yapılandırmayı göster
+- `alp help` — Yardım
+
+---
+
+## Sertifika Sistemi: cerf.alpc
+Alp, paketlerin güvenilirliğini artırmak için `cerf.alpc` dosyalarını destekler.
+- `official` — Resmi Alp sertifikalı paketler
+- `dev` — Geliştirici sertifikalı paketler
+- `normal` — Normal sertifikalı paketler
+- `unsigned` — Sertifikasız paketler (uyarı verir)
+
+`alp update` sırasında repo README ve `cerf.alpc` taranır; listelerde ve `info` çıktısında rozetler gösterilir.
+
+Örnek kullanım:
 ```bash
-alp update
-```
-
-**Çıktı:**
-```
-ℹ️  Dizin yapısı oluşturuldu
-📦 Depo güncelleniyor...
-✅ Depo güncellendi: 15 paket bulundu
+alp cert-info myapp
+alp cert-create normal "Jane Doe" myapp
+alp cert-scan https://github.com/kullanici/proje
 ```
 
 ---
 
-#### `alp install <paket>`
-Belirtilen paketi yükle. Bağımlılıkları otomatik olarak çözer ve kurar.
+## Paket Geliştirme ve Derleme
 
+### README.md Formatı
+Proje kökünde basit meta bilgiler olmalı:
+```markdown
+# MyProject
+
+name = myproject
+ver = 1.0.0
+des = Dosya işlemleri için harika bir CLI aracı
+author = John Doe
+license = MIT
+category = utilities
+deps = [python3, git]
+```
+Zorunlu: `name`, `ver`, `des`
+
+### Kurulum Scripti: `alp.sh`
+- Proje köküne `alp.sh` ekleyin.
+- Paket kurulum/kaldırma adımlarını içerir (Linux uyumlu bash).
+
+### Derleme
 ```bash
-alp install ggs
-alp install myproject
+alp compile ./myproject
+# Çıktı: myproject-1.0.0.alp
 ```
 
-**Özellikler:**
-- ✅ Bağımlılıkları otomatik yükler
-- ✅ Syntax kontrol yapar
-- ✅ Hata durumunda geri yükler (backup)
-- ✅ Ayrıntılı loglama
-
----
-
-#### `alp remove <paket>`
-Belirtilen paketi ve ilişkili dosyalarını kaldır.
-
+### Yerel Paket Kurma
 ```bash
-alp remove ggs
-```
-
-**Uyarı:** Bu işlem geri alınamaz. Lütfen dikkatli olun.
-
----
-
-#### `alp upgrade [paket]`
-Paketleri güncelle. Paket adı belirtilmezse tüm paketler güncellenir.
-
-```bash
-# Belirli paketi güncelle
-alp upgrade myproject
-
-# Tüm paketleri güncelle
-alp upgrade
+alp install-local myproject-1.0.0.alp
 ```
 
 ---
 
-### Paket İşlemleri
-
-#### `alp list [kategori]`
-Tüm paketleri veya belirli bir kategoriye göre listele.
-
-```bash
-# Tüm paketler
-alp list
-
-# Kategoriye göre filtrele
-alp list development
-alp list web
-alp list utilities
+## Dizin Yapısı
 ```
-
-**Kategoriler:**
-- `utilities` - Sistem araçları
-- `development` - Geliştirme araçları
-- `web` - Web uygulamaları
-- `database` - Veritabanı araçları
-- `monitoring` - İzleme araçları
-- `education` - Eğitim araçları
-- `misc` - Diğer
-
----
-
-#### `alp installed`
-Yüklü paketlerin listesini göster. Her paket için sürüm, kurulum tarihi ve kullanılan disk alanı gösterilir.
-
-```bash
-alp installed
-```
-
-**Çıktı:**
-```
-✅ Yüklü Paketler:
-────────────────────────────────────────────────────────────────────────────────
-✓ ggs                      1.0.0    (45.32MB)
-   └─ Yükleme tarihi: 2025-01-15
-✓ myproject                2.1.0    (23.15MB)
-   └─ Yükleme tarihi: 2025-01-14
-────────────────────────────────────────────────────────────────────────────────
+~/.alp/
+├── packages.json          # Tüm mevcut paketler
+├── installed.json         # Yüklü paketler
+├── config.json            # Alp yapılandırması
+├── cache/                 # İndirilen dosyaların cache’i
+│   └── *.sh               # Kurulum/kaldırma scriptleri
+├── logs/                  # İşlem logları
+│   └── alp_*.log          # Tarih/saatli loglar
+└── installed/             # Yüklü paketler
+    └── <paket>/installed.json
 ```
 
 ---
 
-#### `alp search <anahtar>`
-Paket adı veya açıklamasında arama yap.
+## Sistem Sağlığı ve Sorun Giderme
+- `alp doctor` — Bozuk kurulumlar, eksik bağımlılıklar ve cache sorunlarını tarar.
+- `alp clean` — Cache’i temizler; disk alanı kazanımı sağlar.
+- `alp self-update` — Alp’i güvenli şekilde günceller.
 
-```bash
-alp search web
-alp search python
-alp search database
-```
-
----
-
-#### `alp info <paket>`
-Paket hakkında detaylı bilgi göster.
-
-```bash
-alp info ggs
-```
-
-**Gösterilenler:**
-- 📌 Paket adı ve sürüm
-- 📝 Açıklama
-- 👤 Yazar
-- 📜 Lisans
-- 🏷️ Kategori
-- 🔗 GitHub URL
-- 📦 Bağımlılıklar
-
----
-
-### Sistem İşlemleri
-
-#### `alp stats`
-Alp istatistiklerini göster.
-
-```bash
-alp stats
-```
-
-**Gösterilenler:**
-- 📦 Toplam paket sayısı
-- ✅ Yüklü paket sayısı
-- 💾 Kullanılan disk alanı
-- 📚 Alp dizin konumu
-- 📅 Son güncelleme tarihi
-
----
-
-#### `alp doctor`
-Sistemi tarar: bozuk kurulumlar, eksik bağımlılıklar ve cache sorunları.
-
-```bash
-alp doctor
-```
-
-Örnek kontroller:
-- 🔧 Dizinler ve dosyalar: `~/.alp`, `packages.json`, `installed.json`
-- 📦 Kurulum bütünlüğü: paket dosyaları, `installed.json` kaydı
-- 🔗 Bağımlılıklar: eksik bağımlılıklar ve çözüm önerileri
-- 💾 Cache: bozuk veya yarım dosyalar, aşırı boyut
-
-Örnek çıktı:
+Örnek `alp doctor` çıktısı:
 ```
 🩺 Sistem Sağlık Taraması
 ────────────────────────────────────────────────────────────────────────────────
@@ -282,364 +221,22 @@ alp doctor
 
 ---
 
-#### `alp clean`
-İndirilen dosyaların cache'ini temizle. Disk alanı tasarrufu sağlar.
-
-```bash
-alp clean
-```
-
----
-
-#### `alp self-update`
-Alp'in kendisini güncelle. Yeni sürüm indirdikten sonra syntax kontrol yaparak güncelleme yapar.
-
-```bash
-alp self-update
-```
-
-**Özellikler:**
-- ✅ Yeni sürüm syntax kontrol
-- ✅ Otomatik backup ve geri yükleme
-- ✅ Ayrıntılı loglama
+## Sık Karşılaşılan Komutlar
+- `alp update` — Depoyu güncelle
+- `alp install <paket>` — Paket kur
+- `alp remove <paket>` — Paket kaldır
+- `alp installed` — Yüklü paketleri gör
+- `alp doctor` — Sistem taraması
+- `alp cert-info <paket>` — Sertifika bilgisi
 
 ---
 
-#### `alp config`
-Alp yapılandırma dosyasını göster.
-
-```bash
-alp config
-```
-
-**Yapılandırma Seçenekleri:**
-```json
-{
-  "auto_update": true,
-  "update_interval": 3600,
-  "cache_size": 1000,
-  "verify_packages": true,
-  "parallel_install": false,
-  "check_dependencies": true,
-  "keep_cache": false
-}
-```
+## Katkı ve Geri Bildirim
+- Hata/suggestion: GitHub Issues
+- Katkı: Pull Request açabilirsiniz
+- İletişim ve destek: repo açıklamalarına bakınız
 
 ---
 
-#### `alp help`
-Yardımı göster.
-
-```bash
-alp help
-```
-
----
-
-## 📂 Dizin Yapısı
-
-```
-~/.alp/
-├── packages.json          # Tüm mevcut paketler
-├── installed.json         # Yüklü paketler
-├── config.json            # Alp yapılandırması
-├── cache/                 # İndirilen dosyaların cache'i
-│   └── *.sh              # Kurulum/kaldırma scriptleri
-├── logs/                  # İşlem logları
-│   └── alp_*.log         # Tarih ve saat bilgili loglar
-└── installed/             # Yüklü paketler
-    ├── ggs/
-    │   └── installed.json
-    └── myproject/
-        └── installed.json
-```
-
----
-
-## 📝 Proje Paketi Oluşturma
-
-### README.md Formatı
-
-Projenizin kökünde `README.md` dosyasında şu bilgiler olmalıdır:
-
-```markdown
-# MyProject
-
-name = myproject
-ver = 1.0.0
-des = Dosya işlemleri için harika bir CLI aracı
-author = John Doe
-license = MIT
-category = utilities
-deps = [python3, git]
-
-## Açıklama
-Projenizin açıklaması buraya gelir...
-```
-
-**Zorunlu Alanlar:**
-- `name` - Paket adı (boşluksuz, küçük harfler)
-- `ver` - Sürüm numarası (semantic versioning)
-- `des` - Kısa açıklama
-
-**Opsiyonel Alanlar:**
-- `author` - Geliştirici adı
-- `license` - Lisans türü (MIT, GPL, Apache vb.)
-- `category` - Kategori
-- `deps` - Bağımlılıklar (virgülle ayrılmış)
-
----
-
-### alp.sh - Kurulum Scripti
-
-Projenizin kökünde `alp.sh` dosyasını oluşturun:
-
-```bash
-#!/bin/bash
-set -e
-
-PROJECT_NAME="myproject"
-PROJECT_DIR="/opt/$PROJECT_NAME"
-REPO_URL="https://github.com/username/myproject.git"
-
-echo "📦 $PROJECT_NAME Kurulumu Başlıyor..."
-
-# Sistem bağımlılıkları
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip git
-
-# Proje dizini
-mkdir -p "$PROJECT_DIR"
-cd "$PROJECT_DIR"
-
-# Repoyu klonla
-git clone "$REPO_URL" .
-
-# Python bağımlılıkları
-if [ -f requirements.txt ]; then
-    pip3 install -r requirements.txt
-fi
-
-# Sistem komutu oluştur
-sudo ln -sf "$PROJECT_DIR/myproject.py" /usr/local/bin/myproject
-sudo chmod +x /usr/local/bin/myproject
-
-echo "✅ Kurulum tamamlandı!"
-```
-
----
-
-### alp_u.sh - Kaldırma Scripti
-
-Projenizin kökünde `alp_u.sh` dosyasını oluşturun:
-
-```bash
-#!/bin/bash
-set -e
-
-PROJECT_NAME="myproject"
-PROJECT_DIR="/opt/$PROJECT_NAME"
-
-echo "🗑️  $PROJECT_NAME Kaldırılıyor..."
-
-# Sistem komutunu sil
-sudo rm -f /usr/local/bin/$PROJECT_NAME
-
-# Proje dizinini sil
-sudo rm -rf "$PROJECT_DIR"
-
-echo "✅ Kaldırma tamamlandı!"
-```
-
----
-
-### repo.alp'ye Ekleme
-
-`repo.alp` dosyasına GitHub URL'nizi ekleyin:
-
-```
-https://github.com/ATOMGAMERAGA/alp-repo
-https://github.com/username/myproject
-https://github.com/username/another-project
-```
-
-**Not:** Her satırda bir proje URL'si olmalıdır.
-
----
-
-## 🔧 Yapılandırma
-
-Alp yapılandırmasını `~/.alp/config.json` dosyasından düzenleyebilirsiniz:
-
-```json
-{
-  "auto_update": true,
-  "update_interval": 3600,
-  "cache_size": 1000,
-  "verify_packages": true,
-  "parallel_install": false,
-  "check_dependencies": true,
-  "keep_cache": false
-}
-```
-
-**Seçenekler:**
-- `auto_update` - Otomatik güncelleme etkinleştirilsin mi?
-- `update_interval` - Güncelleme kontrolü aralığı (saniye cinsinden)
-- `cache_size` - Cache boyutu limiti (MB)
-- `verify_packages` - Paketler doğrulanabilsin mi?
-- `parallel_install` - Paralel kurulum etkinleştirilsin mi?
-- `check_dependencies` - Bağımlılıklar kontrol edilsin mi?
-- `keep_cache` - Cache koruma edilsin mi?
-
----
-
-## 🔄 Otomatik Güncellemeler
-
-Alp otomatik olarak 24 saatte bir depoyu günceller. Systemd timer tarafından yönetilir:
-
-```bash
-# Timer'ı kontrol et
-sudo systemctl status alp-update.timer
-
-# Timer'ı başlat
-sudo systemctl start alp-update.timer
-
-# Timer'ı durdur
-sudo systemctl stop alp-update.timer
-
-# Timer'ı devre dışı bırak
-sudo systemctl disable alp-update.timer
-```
-
----
-
-## 📖 Man Sayfası
-
-Alp hakkında detaylı bilgi almak için:
-
-```bash
-man alp
-```
-
----
-
-## 🗑️ Kaldırma
-
-Alp'i sisteminizden kaldırmak için:
-
-```bash
-sudo alp-uninstall
-```
-
-Bu komut:
-- ✅ Alp komutunu kaldırır
-- ✅ Systemd timer'ını durdurur
-- ✅ Man sayfasını siler
-- ✅ Tüm system dosyalarını siler
-
-**Not:** `~/.alp/` dizini korunur, dilerseniz manuel olarak silebilirsiniz.
-
----
-
-## 🐛 Sorun Giderme
-
-### Sorun: "Python3 yüklü değil"
-
-```bash
-# Ubuntu/Debian
-sudo apt install python3
-
-# Fedora/RHEL
-sudo dnf install python3
-
-# Arch
-sudo pacman -S python
-```
-
-### Sorun: "Paket bulunamadı"
-
-```bash
-# Depoyu güncelle
-alp update
-
-# Yeniden ara
-alp search paket-adi
-```
-
-### Sorun: "Kurulum scripti indirilemedi"
-
-```bash
-# Internet bağlantınızı kontrol edin
-ping github.com
-
-# Curl/wget testini yapın
-curl -I https://github.com
-```
-
-### Sorun: "Syntax hatası"
-
-```bash
-# Alp'i güncelle
-alp self-update
-
-# Veya manuel güncelleme
-sudo python3 -m py_compile /usr/local/lib/alp/alp_manager.py
-```
-
----
-
-## 📊 Loglar
-
-Tüm işlemler `~/.alp/logs/` dizininde kaydedilir:
-
-```bash
-# Son logları göster
-cat ~/.alp/logs/alp_*.log
-
-# Logları izle
-tail -f ~/.alp/logs/alp_*.log
-```
-
----
-
-## 📋 Lisans
-
-Alp MIT Lisansı altında dağıtılır. Detaylar için LICENSE dosyasına bakın.
-
----
-
-## 👤 İçerik ve Katkı
-
-Alp'e katkıda bulunmak istiyorsanız, GitHub deposundan pull request açabilirsiniz.
-
----
-
-## 📞 Destek
-
-Sorun veya öneriniz varsa:
-
-1. GitHub Issues'da bildirin
-2. Logları kontrol edin: `~/.alp/logs/`
-3. `alp help` komutunu çalıştırın
-
----
-
-### 🔒 Sertifika Sistemi (cerf.alpc)
-
-ALP, GitHub’da barındırılan projeler için depo kökünde `cerf.alpc` dosyası ile sertifika taraması yapar.
-
-Komutlar:
-- `alp cert-create <type> <author> <pkg>`: Mevcut dizinde `cerf.alpc` oluşturur. `type` değerleri: `official`, `dev`, `normal`.
-- `alp cert-scan <github_url>`: GitHub deposunda `cerf.alpc` arar ve doğrulama sonucunu gösterir.
-
-Türler:
-- 🏆 `official`: Resmi ALP sertifikası (şifre gerekir)
-- 🔧 `dev`: Geliştirici sertifikası
-- 👤 `normal`: Normal sertifika
-
-Depo güncellemede (`alp update`), bulunan `cerf.alpc` bilgisi paket listesi ve `alp info` çıktısında rozet olarak gösterilir.
-
----
-
-**Alp Package Manager** - GitHub'dan Paket Yönetimi İçin Gelişmiş Bir Çözüm 🚀
+## Lisans
+Bu proje topluluğa açık şekilde geliştirilmektedir. Lisans bilgisi proje kökünde belirtilir.
