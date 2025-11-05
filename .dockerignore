@@ -3,54 +3,65 @@
 .gitignore
 .gitattributes
 
+# Documentation
+*.md
+!README.md
+DOCKER.md
+kalıp.md
+
 # Python
-__pycache__
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual Environment
-venv/
-env/
-ENV/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Documentation
-*.md
-!README.md
-docs/
+# Alp specific
+.alp/
+*.alp
+*.alpc
+!cerf.alpc
 
-# CI/CD
-.github/
-.gitlab-ci.yml
-
-# Docker
-docker-compose.override.yml
-.dockerignore
-
-# Logs
+# Temporary files
+*.tmp
+*.bak
 *.log
-logs/
-
-# Cache
-.cache/
-*.cache
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Local test files
-test/
-tests/
-*.test.py
+# Docker
+docker-compose.yml
+Makefile
+
+# Installation
+install.sh
+repo.alp
