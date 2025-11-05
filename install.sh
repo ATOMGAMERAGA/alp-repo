@@ -128,10 +128,20 @@ download_manager() {
     local count=0
     
     while [ $count -lt $retries ]; do
-        if curl -s -L "$script_url" -o "$INSTALL_DIR/alp_manager.py" 2>/dev/null; then
+        # Use curl with progress bar and better options for performance
+        if curl -fsSL --connect-timeout 10 --max-time 60 \
+               --retry 2 --retry-delay 2 \
+               "$script_url" -o "$INSTALL_DIR/alp_manager.py" 2>/dev/null; then
             chmod +x "$INSTALL_DIR/alp_manager.py"
-            log_success "Alp Package Manager indirildi"
-            return $SUCCESS
+            
+            # Verify download integrity
+            if python3 -m py_compile "$INSTALL_DIR/alp_manager.py" 2>/dev/null; then
+                log_success "Alp Package Manager indirildi ve doğrulandı"
+                return $SUCCESS
+            else
+                log_warning "İndirilen dosya bozuk, yeniden deneniyor..."
+                rm -f "$INSTALL_DIR/alp_manager.py"
+            fi
         fi
         
         count=$((count + 1))

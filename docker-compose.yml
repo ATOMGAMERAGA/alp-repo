@@ -5,21 +5,38 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # BuildKit for faster builds and better caching
+      cache_from:
+        - alp-manager:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     image: alp-manager:latest
     container_name: alp-package-manager
     
-    # Volume mount - persistant data
+    # Volume mount - persistent data (optimized mounts)
     volumes:
       - alp-data:/root/.alp
       - alp-packages:/root/.alp/installed
-      - alp-cache:/root/.alp/cache
-      - alp-logs:/root/.alp/logs
+      - alp-cache:/root/.alp/cache:cached  # Cached for better performance
+      - alp-logs:/root/.alp/logs:delegated  # Delegated for better write performance
     
-    # Environment variables
+    # Environment variables - Optimized
     environment:
       - TZ=Europe/Istanbul
       - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
       - ALP_AUTO_UPDATE=true
+      - PIP_NO_CACHE_DIR=1
+    
+    # Resource limits for better performance
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
     
     # Restart policy
     restart: unless-stopped
